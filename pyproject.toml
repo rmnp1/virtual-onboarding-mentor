@@ -6,9 +6,11 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "bcrypt>=5.0.0",
+    "fastapi>=0.141.1",
     "pydantic-settings>=2.15.0",
     "python-jose[cryptography]>=3.5.0",
     "sqlalchemy>=2.0.52",
+    "uvicorn[standard]>=0.52.4",
 ]
 
 [build-system]
@@ -26,6 +28,7 @@ dev = [
     "pytest-asyncio",
     "httpx",
     "pre-commit",
+    "types-python-jose>=3.5.0.20260408",
 ]
 
 [tool.ruff]
@@ -34,6 +37,7 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+ignore = ["B008"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
