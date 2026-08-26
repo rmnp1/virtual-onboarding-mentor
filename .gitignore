@@ -8,3 +8,13 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Environment
+.env
+
+# Database
+*.sqlite
+
+# Linter caches
+.ruff_cache/
+.mypy_cache/
