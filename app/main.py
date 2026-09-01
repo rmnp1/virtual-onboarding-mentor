@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.auth.routes import router as auth_router
 from app.chat.routes import router as chat_router
@@ -31,3 +32,5 @@ app.include_router(scenarios_router)
 app.include_router(personalization_router)
 app.include_router(feedback_router)
 app.include_router(metrics_router)
+
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
