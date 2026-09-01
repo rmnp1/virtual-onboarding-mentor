@@ -12,7 +12,6 @@ function loginForm() {
 }
 
 function registerForm() {
-  const roles = ["employee", "hr", "mentor", "admin", "engineering"];
   return `
     <label>Email
       <input name="email" type="email" required />
@@ -28,19 +27,12 @@ function registerForm() {
         <input name="department" />
       </label>
     </div>
-    <div class="row">
-      <label>Role
-        <select name="role">
-          ${roles.map((r) => `<option value="${r}">${r}</option>`).join("")}
-        </select>
-      </label>
-      <label>Language
-        <select name="language">
-          <option value="pl">Polski</option>
-          <option value="en">English</option>
-        </select>
-      </label>
-    </div>
+    <label>Language
+      <select name="language">
+        <option value="pl">Polski</option>
+        <option value="en">English</option>
+      </select>
+    </label>
     <button type="submit" class="primary" style="width: 100%">Register</button>`;
 }
 
@@ -96,7 +88,6 @@ export const AuthView = {
               password: String(fd.get("password")),
               full_name: String(fd.get("full_name") || "").trim() || null,
               department: String(fd.get("department") || "").trim() || null,
-              role: fd.get("role"),
               language: fd.get("language"),
             },
           });

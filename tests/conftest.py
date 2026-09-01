@@ -9,10 +9,12 @@ from fastapi.testclient import TestClient
 _TMP_DIR = tempfile.mkdtemp(prefix="vom_tests_")
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_DIR}/test.db"
 os.environ["CHROMA_PERSIST_DIR"] = f"{_TMP_DIR}/chroma"
+os.environ["SECRET_KEY"] = "test-only-secret-key-which-is-longer-than-32-bytes"
 
 from app.chat.routes import chat_history  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models.base import Base, engine, init_db  # noqa: E402
+from app.models.base import Base, SessionLocal, engine, init_db  # noqa: E402
+from app.models.user import User  # noqa: E402
 from app.scenarios.registry import get_scenario  # noqa: E402
 
 
@@ -37,6 +39,17 @@ def client() -> Iterator[TestClient]:
         yield test_client
 
 
+def _set_role(user_id: int, role: str) -> None:
+    db = SessionLocal()
+    try:
+        user = db.get(User, user_id)
+        assert user is not None
+        user.role = role
+        db.commit()
+    finally:
+        db.close()
+
+
 @pytest.fixture()
 def user_factory(client: TestClient):
     def _factory(
@@ -49,7 +62,6 @@ def user_factory(client: TestClient):
         payload: dict[str, object] = {
             "email": email,
             "password": password,
-            "role": role,
             "language": language,
         }
         payload.update(overrides)
@@ -61,6 +73,10 @@ def user_factory(client: TestClient):
         login = client.post("/api/auth/login", json={"email": email, "password": password})
         assert login.status_code == 200, login.text
         token = str(login.json()["access_token"])
+
+        if role != "employee":
+            _set_role(user_id, role)
+
         return {
             "id": user_id,
             "email": email,

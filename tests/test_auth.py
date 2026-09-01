@@ -1,4 +1,9 @@
 from app.auth.password import hash_password, verify_password
+from app.config import settings
+
+
+def test_secret_key_is_strong() -> None:
+    assert len(settings.secret_key) >= 32
 
 
 def test_password_roundtrip() -> None:
@@ -34,6 +39,24 @@ def test_register_invalid_email(client) -> None:
         json={"email": "not-an-email", "password": "password1"},
     )
     assert response.status_code == 422
+
+
+def test_register_rejects_role_field(client) -> None:
+    response = client.post(
+        "/api/auth/register",
+        json={
+            "email": "esc@example.com",
+            "password": "password1",
+            "full_name": "Esc",
+            "role": "admin",
+        },
+    )
+    assert response.status_code == 422
+    registered = client.post(
+        "/api/auth/login",
+        json={"email": "esc@example.com", "password": "password1"},
+    )
+    assert registered.status_code == 401
 
 
 def test_register_custom_role_and_language(client, user_factory) -> None:

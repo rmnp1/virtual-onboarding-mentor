@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr
 
@@ -8,8 +9,9 @@ class UserCreate(BaseModel):
     password: str
     full_name: str | None = None
     department: str | None = None
-    role: str | None = None
-    language: str | None = None
+    language: Literal["pl", "en"] | None = None
+
+    model_config = {"extra": "forbid"}
 
 
 class UserResponse(BaseModel):

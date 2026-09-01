@@ -22,7 +22,7 @@ def register(body: UserCreate, db: Session = Depends(get_db)) -> User:
         password_hash=hash_password(body.password),
         full_name=body.full_name,
         department=body.department,
-        role=body.role or "employee",
+        role="employee",
         language=body.language or "pl",
     )
     db.add(user)
