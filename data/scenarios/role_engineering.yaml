@@ -1,0 +1,54 @@
+id: role_engineering
+title_pl: Ścieżka inżyniera
+title_en: Engineering track
+order: 3
+roles: [engineering]
+steps:
+  - id: intro
+    type: text
+    content_pl: "Witamy na ścieżce inżyniera! Poznasz narzędzia i procesy, których
+      używa nasz zespół inżynieryjny."
+    content_en: "Welcome to the engineering track! Let's cover the tools and
+      processes our engineering team uses."
+    next_pl: vcs_quiz
+    next_en: vcs_quiz
+
+  - id: vcs_quiz
+    type: quiz
+    content_pl: "Który system kontroli wersji stosujemy w firmie?"
+    content_en: "Which version control system do we use?"
+    options_pl: ["SVN", "GitHub", "Mercurial"]
+    options_en: ["SVN", "GitHub", "Mercurial"]
+    answer: 1
+    next_pl: copilot
+    next_en: copilot
+    retry_pl: intro
+    retry_en: intro
+
+  - id: copilot
+    type: text
+    content_pl: "Używamy GitHub z pull requestami i code review. Korzystamy też z
+      GitHub Copilot jako asystenta kodowania oraz Jiry do śledzenia zadań."
+    content_en: "We use GitHub with pull requests and code review. We also use
+      GitHub Copilot as a coding assistant and Jira for task tracking."
+    next_pl: unit_quiz
+    next_en: unit_quiz
+
+  - id: unit_quiz
+    type: quiz
+    content_pl: "Które narzędzie używamy do śledzenia zadań i sprintów?"
+    content_en: "Which tool do we use for task and sprint tracking?"
+    options_pl: ["Jira", "Trello", "Asana"]
+    options_en: ["Jira", "Trello", "Asana"]
+    answer: 0
+    next_pl: done
+    next_en: done
+    retry_pl: copilot
+    retry_en: copilot
+
+  - id: done
+    type: text
+    content_pl: "Świetnie! Masz podstawy pracy inżyniera w naszej firmie. Pytania
+      kieruj do Tech Lead lub na kanale #engineering."
+    content_en: "Great! You have the engineering basics. Direct questions to the
+      Tech Lead or the #engineering channel."

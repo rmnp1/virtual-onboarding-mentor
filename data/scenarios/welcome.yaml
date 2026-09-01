@@ -1,0 +1,44 @@
+id: welcome
+title_pl: Powitanie i pierwsze kroki
+title_en: Welcome and first steps
+order: 1
+roles: [employee, hr, mentor, engineering]
+steps:
+  - id: greeting
+    type: text
+    content_pl: "Witaj w firmie! Miło Cię widzieć. Na początek zapoznamy się z
+      podstawami. Jesteś gotowy, aby poznać strukturę firmy?"
+    content_en: "Welcome to the company! Glad to have you on board. Let's start
+      with the basics. Ready to learn about the company structure?"
+    next_pl: mission
+    next_en: mission
+
+  - id: mission
+    type: text
+    content_pl: "Jesteśmy firmą technologiczną, która digitalizuje procesy
+      biznesowe dla naszych klientów. Nasz zespół dzieli się na działy:
+      Engineering, Product, Marketing, Sales, HR, Finance i Operations."
+    content_en: "We are a technology company digitizing business processes for
+      our clients. Our team is divided into: Engineering, Product, Marketing,
+      Sales, HR, Finance, and Operations."
+    next_pl: values_quiz
+    next_en: values_quiz
+
+  - id: values_quiz
+    type: quiz
+    content_pl: "Która z poniższych wartości jest kluczowa dla naszej firmy?"
+    content_en: "Which of the following values is key to our company?"
+    options_pl: ["Innowacyjność", "Cisza", "Unikanie ryzyka"]
+    options_en: ["Innovation", "Silence", "Risk avoidance"]
+    answer: 0
+    next_pl: contacts
+    next_en: contacts
+    retry_pl: greeting
+    retry_en: greeting
+
+  - id: contacts
+    type: text
+    content_pl: "Świetnie! W razie pytań zwróć się do działu HR (Slack: #general)
+      lub do swojego opiekuna (buddy). Nauczysz się więcej w kolejnych modułach."
+    content_en: "Great! If you have any questions, reach out to HR (Slack:
+      #general) or your buddy. You'll learn more in upcoming modules."

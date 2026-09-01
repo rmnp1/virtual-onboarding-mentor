@@ -1,0 +1,54 @@
+id: day1
+title_pl: Pierwszy dzień - konfiguracja
+title_en: Day 1 - Setup
+order: 2
+roles: [employee, hr, mentor, engineering]
+steps:
+  - id: intro
+    type: text
+    content_pl: "W pierwszym dniu odbierzesz sprzęt i skonfigurujesz dostęp do
+      systemów. Omówimy narzędzia, których używasz na co dzień."
+    content_en: "On your first day you'll pick up equipment and set up system
+      access. We'll cover the tools you use daily."
+    next_pl: tools_quiz
+    next_en: tools_quiz
+
+  - id: tools_quiz
+    type: quiz
+    content_pl: "Które narzędzie służy do codziennej komunikacji zespołowej?"
+    content_en: "Which tool is used for daily team communication?"
+    options_pl: ["Jira", "Slack", "Git"]
+    options_en: ["Jira", "Slack", "Git"]
+    answer: 1
+    next_pl: security
+    next_en: security
+    retry_pl: intro
+    retry_en: intro
+
+  - id: security
+    type: text
+    content_pl: "Dobrze! Pamiętaj o bezpieczeństwie: używaj 1Password do haseł,
+      włącz MFA na wszystkich kontach i użyj VPN podczas pracy zdalnej."
+    content_en: "Good! Remember security: use 1Password for passwords, enable MFA
+      on all accounts, and use VPN when working remotely."
+    next_pl: helpdesk
+    next_en: helpdesk
+
+  - id: helpdesk
+    type: quiz
+    content_pl: "Gdzie zgłosisz problem techniczny ze sprzętem?"
+    content_en: "Where do you report a hardware technical issue?"
+    options_pl: ["HR", "Księgowość", "IT Helpdesk"]
+    options_en: ["HR", "Accounting", "IT Helpdesk"]
+    answer: 2
+    next_pl: done
+    next_en: done
+    retry_pl: security
+    retry_en: security
+
+  - id: done
+    type: text
+    content_pl: "Świetna robota! Masz podstawy konfiguracji. Kolejne kroki
+      poznasz w scenariuszu rolowym."
+    content_en: "Great job! You have the setup basics down. You'll learn more in
+      the role-specific scenario."
