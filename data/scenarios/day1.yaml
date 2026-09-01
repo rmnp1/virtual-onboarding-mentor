@@ -8,9 +8,9 @@ completion_en: "Congratulations! You have completed the Day 1 scenario. You are 
 steps:
   - id: intro
     type: text
-    content_pl: "W pierwszym dniu odbierzesz sprzęt i skonfigurujesz dostęp do
+    content_pl: "W pierwszym dniu, {name}, odbierzesz sprzęt i skonfigurujesz dostęp do
       systemów. Omówimy narzędzia, których używasz na co dzień."
-    content_en: "On your first day you'll pick up equipment and set up system
+    content_en: "On your first day, {name}, you'll pick up equipment and set up system
       access. We'll cover the tools you use daily."
     next_pl: tools_quiz
     next_en: tools_quiz

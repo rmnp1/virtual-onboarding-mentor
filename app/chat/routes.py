@@ -8,11 +8,12 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_current_user
 from app.chat.context import build_context
 from app.chat.llm import generate, generate_stream
-from app.chat.prompts import get_system_prompt
 from app.chat.schemas import ChatRequest, ChatResponse, WSMessage
 from app.config import settings
-from app.models.base import SessionLocal
+from app.models.base import SessionLocal, get_db
 from app.models.user import User
+from app.models.user_profile import UserProfile
+from app.personalization.service import build_system_prompt, get_profile
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -20,11 +21,14 @@ chat_history: dict[int, list[dict[str, str]]] = defaultdict(list)
 
 
 def _handle_message(
-    user: User, message: str, history: list[dict[str, str]]
+    user: User,
+    message: str,
+    history: list[dict[str, str]],
+    profile: UserProfile | None,
 ) -> tuple[str, list[str]]:
     language = user.language
     context, chunks = build_context(message, language, history)
-    system_prompt = get_system_prompt(language)
+    system_prompt = build_system_prompt(language, user, profile)
     reply = generate(context, system_prompt)
 
     history.append({"role": "user", "content": message})
@@ -38,9 +42,14 @@ def _handle_message(
 
 
 @router.post("", response_model=ChatResponse)
-def chat(body: ChatRequest, user: User = Depends(get_current_user)) -> ChatResponse:
+def chat(
+    body: ChatRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ChatResponse:
     history = chat_history[user.id]
-    reply, sources = _handle_message(user, body.message, history)
+    profile = get_profile(db, user)
+    reply, sources = _handle_message(user, body.message, history, profile)
     return ChatResponse(reply=reply, sources=sources)
 
 
@@ -61,6 +70,7 @@ async def websocket_chat(websocket: WebSocket) -> None:
     db: Session = SessionLocal()
     try:
         user = db.query(User).filter(User.id == user_id).first()
+        profile = get_profile(db, user) if user else None
     finally:
         db.close()
 
@@ -80,7 +90,7 @@ async def websocket_chat(websocket: WebSocket) -> None:
             user_message = msg.get("message", "")
 
             context, chunks = build_context(user_message, language, history)
-            system_prompt = get_system_prompt(language)
+            system_prompt = build_system_prompt(language, user, profile)
 
             full_reply_parts: list[str] = []
             try:

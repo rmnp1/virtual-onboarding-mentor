@@ -8,9 +8,9 @@ completion_en: "Congratulations! You have completed the welcome scenario. You ca
 steps:
   - id: greeting
     type: text
-    content_pl: "Witaj w firmie! Miło Cię widzieć. Na początek zapoznamy się z
+    content_pl: "Witaj w firmie, {name}! Miło Cię widzieć. Na początek zapoznamy się z
       podstawami. Jesteś gotowy, aby poznać strukturę firmy?"
-    content_en: "Welcome to the company! Glad to have you on board. Let's start
+    content_en: "Welcome to the company, {name}! Glad to have you on board. Let's start
       with the basics. Ready to learn about the company structure?"
     next_pl: mission
     next_en: mission

@@ -8,9 +8,9 @@ completion_en: "Congratulations! You have completed the engineering track. You a
 steps:
   - id: intro
     type: text
-    content_pl: "Witamy na ścieżce inżyniera! Poznasz narzędzia i procesy, których
+    content_pl: "Witamy na ścieżce inżyniera, {name}! Poznasz narzędzia i procesy, których
       używa nasz zespół inżynieryjny."
-    content_en: "Welcome to the engineering track! Let's cover the tools and
+    content_en: "Welcome to the engineering track, {name}! Let's cover the tools and
       processes our engineering team uses."
     next_pl: vcs_quiz
     next_en: vcs_quiz

@@ -5,6 +5,7 @@ from app.auth.dependencies import get_current_user
 from app.models.base import get_db
 from app.models.scenario_progress import ScenarioProgress
 from app.models.user import User
+from app.personalization.service import get_profile, render_content
 from app.scenarios.engine import get_current_step, process_answer
 from app.scenarios.progress import get_or_create_progress, update_progress
 from app.scenarios.registry import get_scenario, get_scenarios_for_role
@@ -70,12 +71,13 @@ def scenario_detail(
     step = get_current_step(scenario, progress)
 
     language = user.language
+    profile = get_profile(db, user)
     options = step.options.get(language) if step.answer is not None else None
     return ScenarioDetail(
         scenario_id=scenario_id,
         step_id=step.id,
         type=step.type,
-        content=step.content.get(language, ""),
+        content=render_content(step.content.get(language, ""), user, profile, language),
         options=options,
         completed=progress.completed,
     )
@@ -96,6 +98,7 @@ def scenario_answer(
 
     progress = get_or_create_progress(db, user.id, scenario_id)
     language = user.language
+    profile = get_profile(db, user)
 
     result = process_answer(scenario, progress, language, body.answer)
     if not result.completed:
@@ -112,7 +115,7 @@ def scenario_answer(
 
     return AnswerResponse(
         step_id=result.step_id,
-        message=result.message,
+        message=render_content(result.message, user, profile, language),
         options=options,
         completed=result.completed,
         correct=result.correct,
