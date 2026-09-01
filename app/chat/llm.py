@@ -35,7 +35,16 @@ def generate_stream(prompt: str, system: str) -> Generator[str]:
 
 
 def generate(prompt: str, system: str) -> str:
-    parts: list[str] = []
-    for token in generate_stream(prompt, system):
-        parts.append(token)
-    return "".join(parts)
+    with httpx.Client(timeout=120.0) as client:
+        response = client.post(
+            OLLAMA_GENERATE_URL,
+            json={
+                "model": settings.ollama_model,
+                "prompt": prompt,
+                "system": system,
+                "stream": False,
+            },
+        )
+        response.raise_for_status()
+        data: dict[str, object] = response.json()
+        return str(data.get("response", ""))

@@ -1,7 +1,9 @@
 from app.knowledge_base.retriever import search
 
 
-def build_context(query: str, language: str, history: list[dict[str, str]], top_k: int = 3) -> str:
+def build_context(
+    query: str, language: str, history: list[dict[str, str]], top_k: int = 3
+) -> tuple[str, list[dict[str, object]]]:
     chunks = search(query, language=language, top_k=top_k)
 
     context_parts: list[str] = []
@@ -23,4 +25,4 @@ def build_context(query: str, language: str, history: list[dict[str, str]], top_
 
     context_parts.append(f"[User question]\n{query}")
 
-    return "\n\n".join(context_parts)
+    return "\n\n".join(context_parts), chunks
