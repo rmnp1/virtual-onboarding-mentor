@@ -2,7 +2,8 @@ import asyncio
 import json
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
@@ -52,7 +53,13 @@ def chat(
 ) -> ChatResponse:
     history = chat_history[user.id]
     profile = get_profile(db, user)
-    reply, sources = _handle_message(user, body.message, history, profile)
+    try:
+        reply, sources = _handle_message(user, body.message, history, profile)
+    except httpx.HTTPError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LLM service unavailable",
+        ) from None
     return ChatResponse(reply=reply, sources=sources)
 
 
@@ -102,7 +109,13 @@ async def websocket_chat(websocket: WebSocket) -> None:
             msg: dict[str, str] = json.loads(data)
             user_message = msg.get("message", "")
 
-            context, chunks = build_context(user_message, language, history)
+            try:
+                context, chunks = build_context(user_message, language, history)
+            except httpx.HTTPError:
+                error_msg = WSMessage(type="error", content="LLM service unavailable")
+                await websocket.send_text(error_msg.model_dump_json())
+                continue
+
             system_prompt = build_system_prompt(language, user, profile)
 
             full_reply_parts: list[str] = []

@@ -1,3 +1,5 @@
+import httpx
+
 from app.chat.context import build_context
 from app.chat.prompts import get_system_prompt
 
@@ -74,6 +76,16 @@ def test_chat_rest_requires_auth(client) -> None:
     assert client.post("/api/chat", json={"message": "hi"}).status_code == 401
 
 
+def test_chat_rest_llm_unavailable(client, auth_headers, monkeypatch) -> None:
+    def raise_connect_error(*args: object, **kwargs: object) -> None:
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr("app.chat.context.search", raise_connect_error)
+    response = client.post("/api/chat", headers=auth_headers(), json={"message": "hello"})
+    assert response.status_code == 503
+    assert response.json()["detail"] == "LLM service unavailable"
+
+
 def test_ws_streams_tokens(client, auth_token, patch_search, patch_generate_stream) -> None:
     token = auth_token()
     patch_search()
@@ -117,4 +129,23 @@ def test_ws_rejects_invalid_token(client) -> None:
         websocket.send_json({"type": "auth", "content": "not-a-real-token"})
         frame = websocket.receive_json()
     assert frame["type"] == "error"
-    assert frame["content"] == "Invalid token"
+
+
+def test_ws_sends_error_frame_on_search_failure(
+    client,
+    auth_token,
+    monkeypatch,
+) -> None:
+    def raise_connect_error(*args: object, **kwargs: object) -> None:
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr("app.chat.context.search", raise_connect_error)
+    token = auth_token()
+
+    with client.websocket_connect("/api/chat/ws") as websocket:
+        websocket.send_json({"type": "auth", "content": token})
+        websocket.send_json({"message": "hello"})
+        frame = websocket.receive_json()
+
+    assert frame["type"] == "error"
+    assert frame["content"] == "LLM service unavailable"

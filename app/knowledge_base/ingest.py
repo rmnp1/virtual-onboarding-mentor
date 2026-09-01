@@ -20,6 +20,7 @@ def get_embedding(text: str) -> list[float]:
     response = httpx.post(
         f"{settings.ollama_url}/api/embeddings",
         json={"model": settings.ollama_embedding_model, "prompt": text},
+        timeout=120.0,
     )
     response.raise_for_status()
     data: dict[str, list[float]] = response.json()

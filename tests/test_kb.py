@@ -1,4 +1,10 @@
-from app.knowledge_base.ingest import CHUNK_OVERLAP, CHUNK_SIZE, chunk_text, ingest_documents
+from app.knowledge_base.ingest import (
+    CHUNK_OVERLAP,
+    CHUNK_SIZE,
+    chunk_text,
+    get_embedding,
+    ingest_documents,
+)
 from app.knowledge_base.retriever import search
 
 
@@ -52,6 +58,26 @@ def test_search_without_language_no_filter(monkeypatch) -> None:
     monkeypatch.setattr("app.knowledge_base.retriever.get_embedding", lambda text: [0.0])
     search("query", top_k=3)
     assert fake.called_with["where"] is None
+
+
+def test_get_embedding_uses_long_timeout(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"embedding": [0.5, 0.25] * 4}
+
+    def fake_post(*args: object, **kwargs: object) -> FakeResponse:
+        captured.update(kwargs)
+        return FakeResponse()
+
+    monkeypatch.setattr("app.knowledge_base.ingest.httpx.post", fake_post)
+    embedding = get_embedding("hello")
+    assert embedding == [0.5, 0.25] * 4
+    assert captured["timeout"] == 120.0
 
 
 def test_ingest_documents_stats_and_upsert(tmp_path, monkeypatch) -> None:
