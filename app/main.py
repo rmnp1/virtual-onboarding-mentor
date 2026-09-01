@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.auth.routes import router as auth_router
 from app.chat.routes import router as chat_router
+from app.config import settings
 from app.feedback.routes import router as feedback_router
 from app.metrics.routes import router as metrics_router
 from app.models.base import init_db
@@ -12,13 +13,14 @@ from app.scenarios.routes import router as scenarios_router
 
 app = FastAPI(title="Virtual Onboarding Mentor", version="0.1.0")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_cors_origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.on_event("startup")

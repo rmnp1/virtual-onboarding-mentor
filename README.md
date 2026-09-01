@@ -97,6 +97,7 @@ All settings are read from environment variables (optionally via `.env`); see `a
 | `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text`             | Embedding model for the knowledge base  |
 | `JWT_EXPIRE_MINUTES`     | `1440`                         | Access token lifetime                   |
 | `CHROMA_PERSIST_DIR`     | `./data/chroma`                | ChromaDB persistent directory           |
+| `CORS_ORIGINS`           | *(empty = disabled)*           | Comma-separated allowed CORS origins    |
 
 ## API
 

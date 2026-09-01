@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     ollama_embedding_model: str = "nomic-embed-text"
     jwt_expire_minutes: int = 1440
     chroma_persist_dir: str = "./data/chroma"
+    cors_origins: str = ""
 
     model_config = {"env_file": ".env"}
 

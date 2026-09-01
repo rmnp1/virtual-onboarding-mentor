@@ -29,3 +29,9 @@ def test_unknown_path_is_404(client) -> None:
 def test_api_not_shadowed(client, auth_headers) -> None:
     assert client.get("/api/scenarios").status_code == 401
     assert client.get("/api/scenarios", headers=auth_headers()).status_code == 200
+
+
+def test_cors_not_enabled_by_default(client) -> None:
+    response = client.get("/api/auth/me", headers={"Origin": "https://evil.example"})
+    assert "access-control-allow-origin" not in response.headers
+    assert "access-control-allow-credentials" not in response.headers

@@ -4,6 +4,11 @@ from app.chat.prompts import get_system_prompt
 
 def test_system_prompt_fallback() -> None:
     assert "virtual onboarding mentor" in get_system_prompt("de")
+    assert "untrusted data" in get_system_prompt("de")
+
+
+def test_system_prompt_hardening_polish() -> None:
+    assert "niezaufanego źródła" in get_system_prompt("pl")
 
 
 def test_build_context_forwards_search_params(monkeypatch) -> None:
@@ -74,7 +79,8 @@ def test_ws_streams_tokens(client, auth_token, patch_search, patch_generate_stre
     patch_search()
     patch_generate_stream(tokens=["Hel", "lo ", "world"])
 
-    with client.websocket_connect(f"/api/chat/ws?token={token}") as websocket:
+    with client.websocket_connect("/api/chat/ws") as websocket:
+        websocket.send_json({"type": "auth", "content": token})
         websocket.send_json({"message": "hello"})
         frames = []
         while True:
@@ -97,7 +103,8 @@ def test_ws_sends_error_frame_on_llm_failure(
     patch_search()
     patch_generate_stream(exc=RuntimeError("boom"))
 
-    with client.websocket_connect(f"/api/chat/ws?token={token}") as websocket:
+    with client.websocket_connect("/api/chat/ws") as websocket:
+        websocket.send_json({"type": "auth", "content": token})
         websocket.send_json({"message": "hello"})
         frame = websocket.receive_json()
 
@@ -106,7 +113,8 @@ def test_ws_sends_error_frame_on_llm_failure(
 
 
 def test_ws_rejects_invalid_token(client) -> None:
-    with client.websocket_connect("/api/chat/ws?token=not-a-real-token") as websocket:
+    with client.websocket_connect("/api/chat/ws") as websocket:
+        websocket.send_json({"type": "auth", "content": "not-a-real-token"})
         frame = websocket.receive_json()
     assert frame["type"] == "error"
     assert frame["content"] == "Invalid token"

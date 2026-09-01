@@ -79,6 +79,7 @@ def test_build_system_prompt_base() -> None:
     prompt = build_system_prompt("en", _user(), None)
     assert "virtual onboarding mentor" in prompt
     assert "[User profile]" in prompt
+    assert "untrusted data" in prompt
 
 
 def test_get_profile_defaults(client, auth_headers) -> None:

@@ -38,12 +38,11 @@ export const ChatView = {
     }
 
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(
-      `${proto}//${window.location.host}/api/chat/ws?token=${encodeURIComponent(getToken())}`,
-    );
+    const ws = new WebSocket(`${proto}//${window.location.host}/api/chat/ws`);
     socket = ws;
 
     ws.addEventListener("open", () => {
+      ws.send(JSON.stringify({ type: "auth", content: getToken() }));
       status.textContent = "connected";
       status.classList.add("ok");
     });

@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections import defaultdict
 
@@ -18,6 +19,8 @@ from app.personalization.service import build_system_prompt, get_profile
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 chat_history: dict[int, list[dict[str, str]]] = defaultdict(list)
+
+_WS_AUTH_TIMEOUT = 10.0
 
 
 def _handle_message(
@@ -57,7 +60,17 @@ def chat(
 async def websocket_chat(websocket: WebSocket) -> None:
     await websocket.accept()
 
-    token = websocket.query_params.get("token", "")
+    try:
+        first_frame = json.loads(
+            await asyncio.wait_for(websocket.receive_text(), timeout=_WS_AUTH_TIMEOUT)
+        )
+    except (TimeoutError, json.JSONDecodeError):
+        error_msg = WSMessage(type="error", content="Authentication required")
+        await websocket.send_text(error_msg.model_dump_json())
+        await websocket.close()
+        return
+
+    token = str(first_frame.get("content", "")) if first_frame.get("type") == "auth" else ""
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
         user_id = int(payload.get("sub", 0))

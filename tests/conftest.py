@@ -33,6 +33,15 @@ def _clear_chat_history() -> Iterator[None]:
     chat_history.clear()
 
 
+@pytest.fixture(autouse=True)
+def _clear_rate_limits() -> Iterator[None]:
+    from app.auth.ratelimit import login_email, login_ip, register_ip
+
+    for limiter in (register_ip, login_ip, login_email):
+        limiter.clear()
+    yield
+
+
 @pytest.fixture()
 def client() -> Iterator[TestClient]:
     with TestClient(app) as test_client:

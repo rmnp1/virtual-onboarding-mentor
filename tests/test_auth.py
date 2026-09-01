@@ -100,6 +100,59 @@ def test_login_unknown_email(client) -> None:
     assert response.status_code == 401
 
 
+def test_register_rate_limited(client) -> None:
+    for i in range(10):
+        payload = {"email": f"rl-{i}@example.com", "password": "password1"}
+        assert client.post("/api/auth/register", json=payload).status_code == 201
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "rl-over@example.com", "password": "password1"},
+    )
+    assert response.status_code == 429
+
+
+def test_login_email_rate_limited(client) -> None:
+    client.post(
+        "/api/auth/register",
+        json={"email": "rl-e@example.com", "password": "password1"},
+    )
+    for _ in range(5):
+        response = client.post(
+            "/api/auth/login",
+            json={"email": "rl-e@example.com", "password": "wrong-password"},
+        )
+        assert response.status_code == 401
+    response = client.post(
+        "/api/auth/login",
+        json={"email": "rl-e@example.com", "password": "wrong-password"},
+    )
+    assert response.status_code == 429
+
+
+def test_register_rejects_short_password(client) -> None:
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "short@example.com", "password": "short"},
+    )
+    assert response.status_code == 422
+
+
+def test_register_rejects_long_password_bytes(client) -> None:
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "wide@example.com", "password": "😀" * 19},
+    )
+    assert response.status_code == 422
+
+
+def test_login_rejects_oversized_password(client) -> None:
+    response = client.post(
+        "/api/auth/login",
+        json={"email": "big@example.com", "password": "x" * 73},
+    )
+    assert response.status_code == 422
+
+
 def test_me_requires_token(client) -> None:
     assert client.get("/api/auth/me").status_code == 401
 

@@ -1,8 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import create_access_token, get_current_user
 from app.auth.password import hash_password, verify_password
+from app.auth.ratelimit import (
+    check_rate_limit,
+    ip_enforce,
+    login_email,
+    login_ip,
+    register_ip,
+)
 from app.auth.schemas import LoginRequest, TokenResponse, UserCreate, UserResponse
 from app.models.base import get_db
 from app.models.user import User
@@ -11,7 +18,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register(body: UserCreate, db: Session = Depends(get_db)) -> User:
+def register(body: UserCreate, request: Request, db: Session = Depends(get_db)) -> User:
+    ip_enforce(register_ip, request)
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -32,7 +40,9 @@ def register(body: UserCreate, db: Session = Depends(get_db)) -> User:
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(body: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -> TokenResponse:
+    ip_enforce(login_ip, request)
+    check_rate_limit(login_email, body.email.lower())
     user = db.query(User).filter(User.email == body.email).first()
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(
