@@ -15,6 +15,12 @@ wheels/
 # Database
 *.sqlite
 
+# Vector store
+data/chroma/
+
+# IDE
+.idea/
+
 # Linter caches
 .ruff_cache/
 .mypy_cache/

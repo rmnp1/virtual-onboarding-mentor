@@ -5,7 +5,8 @@ from app.auth.dependencies import get_current_user
 from app.models.base import get_db
 from app.models.scenario_progress import ScenarioProgress
 from app.models.user import User
-from app.scenarios.engine import process_answer
+from app.scenarios.engine import get_current_step, process_answer
+from app.scenarios.progress import get_or_create_progress, update_progress
 from app.scenarios.registry import get_scenario, get_scenarios_for_role
 from app.scenarios.schemas import (
     AnswerRequest,
@@ -64,9 +65,6 @@ def scenario_detail(
         .first()
     )
 
-    from app.scenarios.engine import get_current_step
-    from app.scenarios.progress import get_or_create_progress
-
     if progress is None or not progress.current_step:
         progress = get_or_create_progress(db, user.id, scenario_id)
     step = get_current_step(scenario, progress)
@@ -95,8 +93,6 @@ def scenario_answer(
         raise HTTPException(status_code=404, detail="Scenario not found")
     if user.role not in scenario.roles:
         raise HTTPException(status_code=403, detail="Scenario not available for your role")
-
-    from app.scenarios.progress import get_or_create_progress, update_progress
 
     progress = get_or_create_progress(db, user.id, scenario_id)
     language = user.language

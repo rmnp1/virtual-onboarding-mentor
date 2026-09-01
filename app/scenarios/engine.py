@@ -12,8 +12,27 @@ class EngineResult:
     correct: bool | None = None
 
 
+DEFAULT_COMPLETION = {
+    "pl": (
+        "Gratulacje! Ukończyłeś ten scenariusz. Możesz wrócić do niego w każdej"
+        " chwili lub przejść do kolejnego modułu."
+    ),
+    "en": (
+        "Congratulations! You have completed this scenario. You can revisit it"
+        " any time or move on to the next module."
+    ),
+}
+
+
 def get_first_step(scenario: Scenario) -> Step:
     return next(iter(scenario.steps.values()))
+
+
+def _completion_message(scenario: Scenario, language: str) -> str:
+    message = scenario.completion.get(language, "")
+    if message:
+        return message
+    return DEFAULT_COMPLETION.get(language, DEFAULT_COMPLETION["en"])
 
 
 def get_current_step(scenario: Scenario, progress: ScenarioProgress) -> Step:
@@ -82,7 +101,7 @@ def _advance(
         progress.completed = True
         progress.status = "completed"
         return EngineResult(
-            message=_format_step(get_current_step(scenario, progress), language),
+            message=_completion_message(scenario, language),
             step_id="",
             completed=True,
             correct=correct,

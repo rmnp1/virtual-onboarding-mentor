@@ -3,6 +3,8 @@ title_pl: Ścieżka inżyniera
 title_en: Engineering track
 order: 3
 roles: [engineering]
+completion_pl: "Gratulacje! Ukończyłeś ścieżkę inżyniera. Jesteś gotowy na pierwsze zadania w zespole."
+completion_en: "Congratulations! You have completed the engineering track. You are ready for your first team tasks."
 steps:
   - id: intro
     type: text

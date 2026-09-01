@@ -3,6 +3,8 @@ title_pl: Powitanie i pierwsze kroki
 title_en: Welcome and first steps
 order: 1
 roles: [employee, hr, mentor, engineering]
+completion_pl: "Gratulacje! Ukończyłeś scenariusz powitalny. Możesz wrócić do niego w każdej chwili lub przejść do kolejnego modułu."
+completion_en: "Congratulations! You have completed the welcome scenario. You can revisit it any time or move on to the next module."
 steps:
   - id: greeting
     type: text

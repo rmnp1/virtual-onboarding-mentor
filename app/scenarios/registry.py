@@ -24,16 +24,11 @@ class Scenario:
     order: int
     roles: list[str]
     steps: dict[str, Step]
+    completion: dict[str, str] = field(default_factory=dict)
 
 
 def _str(value: object) -> str:
     return str(value)
-
-
-def _str_dict(value: object | None) -> dict[str, str]:
-    if isinstance(value, dict):
-        return {str(k): str(v) for k, v in value.items()}
-    return {}
 
 
 def _list_str(value: object) -> list[str]:
@@ -90,6 +85,10 @@ def _load_scenario(path: Path) -> Scenario:
         order=_int(raw.get("order")),
         roles=_list_str(raw.get("roles", [])),
         steps=steps,
+        completion={
+            "pl": _str(raw.get("completion_pl", "")),
+            "en": _str(raw.get("completion_en", "")),
+        },
     )
 
 

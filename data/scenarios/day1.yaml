@@ -3,6 +3,8 @@ title_pl: Pierwszy dzień - konfiguracja
 title_en: Day 1 - Setup
 order: 2
 roles: [employee, hr, mentor, engineering]
+completion_pl: "Gratulacje! Ukończyłeś scenariusz pierwszego dnia. Jutro możesz ruszyć z codzienną pracą."
+completion_en: "Congratulations! You have completed the Day 1 scenario. You are ready to start your daily work."
 steps:
   - id: intro
     type: text
