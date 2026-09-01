@@ -54,5 +54,4 @@ def require_role(*allowed_roles: str) -> Callable[..., User]:
             )
         return user
 
-    result: Callable[..., User] = Depends(role_checker)
-    return result
+    return role_checker

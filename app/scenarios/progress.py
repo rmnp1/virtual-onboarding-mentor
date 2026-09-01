@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -30,7 +30,7 @@ def update_progress(db: Session, progress: ScenarioProgress, completed: bool = F
     if completed:
         progress.status = "completed"
         progress.completed = True
-        progress.completed_at = datetime.now()
+        progress.completed_at = datetime.now(UTC).replace(tzinfo=None)
     db.commit()
     db.refresh(progress)
 
