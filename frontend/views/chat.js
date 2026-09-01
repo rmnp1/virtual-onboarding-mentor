@@ -39,7 +39,7 @@ export const ChatView = {
 
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(
-      `${proto}//${window.location.host}/api/ws?token=${encodeURIComponent(getToken())}`,
+      `${proto}//${window.location.host}/api/chat/ws?token=${encodeURIComponent(getToken())}`,
     );
     socket = ws;
 
