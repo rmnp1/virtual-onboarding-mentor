@@ -108,3 +108,96 @@ def test_ingest_documents_stats_and_upsert(tmp_path, monkeypatch) -> None:
     assert call["ids"][0] == "en_hr_0"
     assert len(call["documents"]) == stats["chunks"]
     assert all(meta["language"] == "en" for meta in call["metadatas"])
+
+
+class _FakeResponse:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._payload = payload
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict[str, object]:
+        return self._payload
+
+
+def test_gemini_embedding_parses_response(monkeypatch) -> None:
+    from app.config import settings
+    from app.knowledge_base.ingest import get_embedding
+
+    captured: dict[str, object] = {}
+
+    def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
+        captured["url"] = args[0]
+        captured.update(kwargs)
+        return _FakeResponse({"data": [{"embedding": [0.1, 0.2, 0.3]}]})
+
+    monkeypatch.setattr("app.knowledge_base.ingest.httpx.post", fake_post)
+    monkeypatch.setattr(settings, "embedding_provider", "gemini")
+    monkeypatch.setattr(settings, "embedding_model", "gemini-embedding-001")
+    monkeypatch.setattr(settings, "embedding_api_key", "test-key")
+
+    embedding = get_embedding("hello")
+    assert embedding == [0.1, 0.2, 0.3]
+
+
+def test_gemini_embedding_sends_expected_payload(monkeypatch) -> None:
+    from app.config import settings
+    from app.knowledge_base.ingest import get_embedding
+
+    captured: dict[str, object] = {}
+
+    def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
+        captured["url"] = args[0]
+        captured["headers"] = kwargs.get("headers")
+        captured["json"] = kwargs.get("json")
+        captured["timeout"] = kwargs.get("timeout")
+        return _FakeResponse({"data": [{"embedding": [1.0]}]})
+
+    monkeypatch.setattr("app.knowledge_base.ingest.httpx.post", fake_post)
+    monkeypatch.setattr(settings, "embedding_provider", "gemini")
+    monkeypatch.setattr(settings, "embedding_model", "gemini-embedding-001")
+    monkeypatch.setattr(settings, "embedding_api_key", "test-key")
+
+    get_embedding("hello")
+    assert captured["url"] == ("https://generativelanguage.googleapis.com/v1beta/openai/embeddings")
+    assert captured["headers"]["Authorization"] == "Bearer test-key"
+    assert captured["json"] == {"model": "gemini-embedding-001", "input": "hello"}
+    assert captured["timeout"] == 120.0
+
+
+def test_gemini_embedding_empty_data_returns_empty(monkeypatch) -> None:
+    from app.config import settings
+    from app.knowledge_base.ingest import get_embedding
+
+    def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
+        return _FakeResponse({"data": []})
+
+    monkeypatch.setattr("app.knowledge_base.ingest.httpx.post", fake_post)
+    monkeypatch.setattr(settings, "embedding_provider", "gemini")
+
+    assert get_embedding("hello") == []
+
+
+def test_ollama_default_embedding_still_used(monkeypatch) -> None:
+    from app.config import settings
+    from app.knowledge_base.ingest import get_embedding
+
+    captured: dict[str, object] = {}
+
+    def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
+        captured["url"] = args[0]
+        captured["json"] = kwargs.get("json")
+        return _FakeResponse({"embedding": [0.5, 0.25]})
+
+    monkeypatch.setattr("app.knowledge_base.ingest.httpx.post", fake_post)
+    monkeypatch.setattr(settings, "embedding_provider", "ollama")
+    monkeypatch.setattr(settings, "ollama_embedding_model", "nomic-embed-text")
+
+    embedding = get_embedding("hello")
+    assert embedding == [0.5, 0.25]
+    assert captured["url"] == f"{settings.ollama_url}/api/embeddings"
+    assert captured["json"] == {
+        "model": "nomic-embed-text",
+        "prompt": "hello",
+    }
