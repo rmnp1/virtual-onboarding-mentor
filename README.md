@@ -1,16 +1,20 @@
 # Virtual Onboarding Mentor
 
-A self-hosted conversational assistant that helps new employees learn organizational
-procedures. It provides an onboarding flow built on a knowledge base with RAG retrieval,
-step-by-step onboarding scenarios, personalized mentor context, and an interactive
-web chat powered by Ollama.
+A conversational assistant that helps new employees learn organizational procedures. It
+provides an onboarding flow built on a knowledge base with RAG retrieval, step-by-step
+onboarding scenarios, personalized mentor context, and an interactive web chat.
+
+Deployed on free, cloud-native infrastructure: a FastAPI app hosted on Render, a
+PostgreSQL + pgvector database on Supabase, and Google Gemini for both chat and embeddings.
+It can also run fully locally with Ollama, SQLite, and ChromaDB — no cloud account required.
 
 ## Features
 
 - **Authentication** — email/password registration and login with JWT (bcrypt hashing).
   Roles: `employee`, `hr`, `mentor`, `admin`.
-- **Knowledge base (RAG)** — markdown documents are chunked and embedded with Ollama,
-  stored in ChromaDB, and retrieved per-language to ground chat answers.
+- **Knowledge base (RAG)** — markdown documents are chunked and embedded (Ollama or Gemini),
+  stored (ChromaDB locally or pgvector on PostgreSQL), and retrieved per-language to ground
+  chat answers.
 - **Onboarding scenarios** — YAML-driven step-by-step flows (text, quizzes) with progress
   tracking, per-role visibility, and bilingual content (`en`, `pl`).
 - **Personalization** — user profiles (experience level, pace, interests, preferred name)
@@ -64,9 +68,11 @@ tests/
 
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/)
-- [Ollama](https://ollama.com/) running locally
+- One LLM/embedding backend:
+  - **Local mode:** [Ollama](https://ollama.com/) running locally (default), **or**
+  - **Cloud mode:** a Google AI Studio API key (sets `LLM_PROVIDER=gemini` / `EMBEDDING_PROVIDER=gemini`)
 
-### Setup
+### Setup (local mode, default)
 
 ```bash
 uv sync                                          # install dependencies
@@ -84,7 +90,35 @@ The app refuses to start until `SECRET_KEY` is set (a missing or short key raise
 
 Open <http://localhost:8000>, register an account, and start onboarding.
 
+### Setup (cloud mode — Gemini, no Ollama)
+
+In `.env`, set the provider to Gemini and provide an API key:
+
+```
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini-2.0-flash
+LLM_API_KEY=<your-google-ai-studio-key>
+EMBEDDING_PROVIDER=gemini
+EMBEDDING_MODEL=gemini-embedding-001
+EMBEDDING_DIMENSION=768
+```
+
+Then seed and start as in local mode (Ollama steps are skipped):
+
+```bash
+uv run python -m app.knowledge_base.seed
+uv run uvicorn app.main:app --reload
+```
+
+Using a PostgreSQL + pgvector backend under `DATABASE_URL` is optional locally and
+required for the cloud deployment on Render (see below).
+
 ## Production deployment
+
+Two deployment paths are supported: self-hosted on your own server, or free cloud hosting
+via Render + Supabase.
+
+### Self-hosted
 
 ```bash
 # generate a strong secret key
