@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: virtual-onboarding-mentor
+    runtime: python
+    plan: free
+    buildCommand: ./build.sh
+    startCommand: ./start.sh
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+        comment: "PostgreSQL + pgvector connection string (e.g. Supabase), e.g. postgresql+psycopg://USER:PASSWORD@HOST:5432/dbname"
+      - key: SECRET_KEY
+        sync: false
+        comment: JWT signing key, min 32 characters
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: LLM_MODEL
+        sync: false
+        comment: Gemini chat model id, e.g. gemini-2.0-flash
+      - key: LLM_API_KEY
+        sync: false
+        comment: Google AI Studio API key
+      - key: EMBEDDING_PROVIDER
+        value: gemini
+      - key: EMBEDDING_MODEL
+        value: gemini-embedding-001
+      - key: EMBEDDING_DIMENSION
+        value: "768"
+      - key: EMBEDDING_API_KEY
+        sync: false
+        comment: Google AI Studio API key for embeddings
+      - key: EXPOSE_DOCS
+        value: "false"
+      - key: INVITE_REQUIRED
+        value: "true"
+      - key: INVITE_CODES
+        sync: false
+        comment: Comma-separated invite codes for registration
+      - key: CORS_ORIGINS
+        value: ""

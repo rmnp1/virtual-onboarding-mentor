@@ -26,10 +26,10 @@ web chat powered by Ollama.
 | Layer      | Technology                                      |
 | ---------- | ----------------------------------------------- |
 | API        | FastAPI (Python 3.13)                           |
-| Database   | SQLite via SQLAlchemy                           |
-| Vector DB  | ChromaDB (persistent)                           |
-| Embeddings | Ollama (`nomic-embed-text`)                     |
-| Chat LLM   | Ollama (streaming)                              |
+| Database   | SQLite (local) or PostgreSQL via SQLAlchemy     |
+| Vector DB  | ChromaDB (local dev) or pgvector (PostgreSQL)   |
+| Embeddings | Ollama (`nomic-embed-text`) or Gemini           |
+| Chat LLM   | Ollama (streaming) or Gemini                    |
 | Auth       | JWT (python-jose) + bcrypt [cryptography]       |
 | Frontend   | Vanilla JS SPA (no build step)                  |
 | Tests      | pytest, pytest-cov                              |
@@ -120,6 +120,50 @@ SQLite is suitable for small deployments. For larger scale, swap `DATABASE_URL` 
 and update the SQLAlchemy driver accordingly. Back up `data/db.sqlite` and `data/chroma/`
 regularly.
 
+### Cloud deployment (Render + Supabase)
+
+Two optional providers are used for a free, no-Ollama deployment:
+
+- **Render** hosts the FastAPI app (long-running process with WebSocket support).
+- **Supabase** hosts PostgreSQL with the `pgvector` extension for vector search.
+
+The application reads a standard `DATABASE_URL` (`postgresql+psycopg://...`) and uses only
+SQLAlchemy/psycopg/pgvector — it does not use any Supabase-specific client API, so the
+database layer stays provider-agnostic.
+
+Deploy config lives in `render.yaml` (Render Blueprint), with `build.sh`/`start.sh` entry
+scripts. GitHub Actions (`ci.yml`) runs linting, formatting, type checks, and tests on push
+and pull requests.
+
+1. **Create a Supabase project.** Under *Database → Settings → Connection string* copy the
+   pooler/connection string (choose `pgvector`). Enable the `vector` extension is handled
+   automatically at app startup (`CREATE EXTENSION IF NOT EXISTS vector`).
+2. **Push this repository to GitHub.**
+3. **Create a Render Blueprint** and connect the GitHub repo. Render uses `render.yaml` to
+   scaffold the web service automatically.
+4. **Set the secrets in Render** (they are stored in the Render dashboard, not in the repo):
+   `DATABASE_URL`, `SECRET_KEY`, `LLM_MODEL`, `LLM_API_KEY`, `EMBEDDING_API_KEY`, `INVITE_CODES`.
+5. **Deploy.** Render installs dependencies via `build.sh` (`uv sync --frozen`) and starts
+   the app via `start.sh` using the `$PORT` Render provides.
+
+After the first deploy, seed the knowledge base once (embeddings use Gemini, so no Ollama is
+needed):
+
+```bash
+uv run python -m app.knowledge_base.seed
+```
+
+To copy an existing local ChromaDB index into PostgreSQL + pgvector (it does not delete the
+Chroma source):
+
+```bash
+uv run python -m app.knowledge_base.migrate
+```
+
+> **Note on the free tier:** Render free web services spin down after inactivity and take a
+> few seconds to cold-start on the next request. The `chroma_persist_dir` setting is unused in
+> the cloud path (PostgreSQL + pgvector is used instead).
+
 ## Configuration
 
 All settings are read from environment variables (optionally via `.env`); see `app/config.py`.
@@ -132,8 +176,18 @@ All settings are read from environment variables (optionally via `.env`); see `a
 | `OLLAMA_MODEL`           | `llama3`                       | Chat model for `generate`/streaming     |
 | `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text`             | Embedding model for the knowledge base  |
 | `JWT_EXPIRE_MINUTES`     | `1440`                         | Access token lifetime                   |
-| `CHROMA_PERSIST_DIR`     | `./data/chroma`                | ChromaDB persistent directory           |
+| `CHROMA_PERSIST_DIR`     | `./data/chroma`                | ChromaDB persistent directory (dev)     |
 | `CORS_ORIGINS`           | *(empty = disabled)*           | Comma-separated allowed CORS origins    |
+| `EXPOSE_DOCS`            | `true`                         | Set `false` to hide `/docs` in prod     |
+| `LLM_PROVIDER`           | `ollama`                       | `ollama` or `gemini`                    |
+| `LLM_MODEL`              | `llama3`                       | Chat model id for the configured provider |
+| `LLM_API_KEY`            | *(empty)*                      | Gemini API key (when `LLM_PROVIDER=gemini`) |
+| `EMBEDDING_PROVIDER`     | `ollama`                       | `ollama` or `gemini`                    |
+| `EMBEDDING_MODEL`        | `nomic-embed-text`             | Embedding model id                      |
+| `EMBEDDING_API_KEY`      | *(empty)*                      | Gemini API key (when `EMBEDDING_PROVIDER=gemini`) |
+| `EMBEDDING_DIMENSION`    | `768`                          | pgvector vector dimension               |
+| `INVITE_REQUIRED`        | `false`                        | Require an invite code to register      |
+| `INVITE_CODES`           | *(empty)*                      | Comma-separated valid invite codes      |
 
 ## API
 
