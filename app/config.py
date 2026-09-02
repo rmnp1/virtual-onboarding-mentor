@@ -10,6 +10,13 @@ class Settings(BaseSettings):
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "llama3"
     ollama_embedding_model: str = "nomic-embed-text"
+    llm_provider: str = "ollama"
+    llm_model: str = "llama3"
+    llm_api_key: str = ""
+    embedding_provider: str = "ollama"
+    embedding_model: str = "nomic-embed-text"
+    embedding_api_key: str = ""
+    embedding_dimension: int = 768
     jwt_expire_minutes: int = 1440
     chroma_persist_dir: str = "./data/chroma"
     cors_origins: str = ""

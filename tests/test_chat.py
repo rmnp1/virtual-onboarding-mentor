@@ -1,3 +1,5 @@
+import json
+
 import httpx
 
 from app.chat.context import build_context
@@ -179,3 +181,143 @@ def test_ws_chat_rate_limited(client, auth_token, patch_search, patch_generate_s
 
     assert frame["type"] == "error"
     assert frame["content"] == "Too many requests"
+
+
+def _mock_llm_client(monkeypatch, handler):
+    from app.chat import llm
+
+    real_client = httpx.Client
+
+    def _client(**kwargs):
+        kwargs.pop("transport", None)
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(llm.httpx, "Client", _client)
+
+
+def test_gemini_generate_parse_non_stream(monkeypatch) -> None:
+    from app.chat import llm
+    from app.config import settings
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "Bearer test-key"
+        body = json.loads(request.content)
+        assert body["model"] == "gemini-model"
+        assert body["stream"] is False
+        assert body["messages"][0] == {"role": "system", "content": "sys"}
+        assert body["messages"][1] == {"role": "user", "content": "prompt"}
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "Gemini reply"}}]},
+        )
+
+    _mock_llm_client(monkeypatch, handler)
+    monkeypatch.setattr(settings, "llm_provider", "gemini")
+    monkeypatch.setattr(settings, "llm_model", "gemini-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-key")
+
+    reply = llm.generate("prompt", "sys")
+    assert reply == "Gemini reply"
+
+
+def test_gemini_generate_empty_choices(monkeypatch) -> None:
+    from app.chat import llm
+    from app.config import settings
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": []})
+
+    _mock_llm_client(monkeypatch, handler)
+    monkeypatch.setattr(settings, "llm_provider", "gemini")
+
+    assert llm.generate("prompt", "sys") == ""
+
+
+def test_gemini_stream_parses_delta(monkeypatch) -> None:
+    from app.chat import llm
+    from app.config import settings
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["stream"] is True
+        payloads = [
+            "data: " + json.dumps({"choices": [{"delta": {"content": "Hel"}}]}) + "\n",
+            "data: " + json.dumps({"choices": [{"delta": {"content": "lo"}}]}) + "\n",
+            "data: [DONE]\n",
+        ]
+        return httpx.Response(
+            200,
+            content="".join(payloads),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    _mock_llm_client(monkeypatch, handler)
+    monkeypatch.setattr(settings, "llm_provider", "gemini")
+    monkeypatch.setattr(settings, "llm_model", "gemini-model")
+    monkeypatch.setattr(settings, "llm_api_key", "k")
+
+    tokens = list(llm.generate_stream("prompt", "sys"))
+    assert tokens == ["Hel", "lo"]
+
+
+def test_gemini_stream_skips_empty_delta(monkeypatch) -> None:
+    from app.chat import llm
+    from app.config import settings
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payloads = [
+            "data: " + json.dumps({"choices": [{"delta": {"content": None}}]}) + "\n",
+            "data: " + json.dumps({"choices": [{"delta": {"content": ""}}]}) + "\n",
+            "data: " + json.dumps({"choices": [{"delta": {"content": "ok"}}]}) + "\n",
+            "data: [DONE]\n",
+        ]
+        return httpx.Response(
+            200,
+            content="".join(payloads),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    _mock_llm_client(monkeypatch, handler)
+    monkeypatch.setattr(settings, "llm_provider", "gemini")
+
+    assert list(llm.generate_stream("prompt", "sys")) == ["ok"]
+
+
+def test_gemini_stream_handles_non_data_lines(monkeypatch) -> None:
+    from app.chat import llm
+    from app.config import settings
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payloads = [
+            ": keep-alive comment\n",
+            "data: " + json.dumps({"choices": [{"delta": {"content": "x"}}]}) + "\n",
+            "unexpected\n",
+            "data: [DONE]\n",
+        ]
+        return httpx.Response(
+            200,
+            content="".join(payloads),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    _mock_llm_client(monkeypatch, handler)
+    monkeypatch.setattr(settings, "llm_provider", "gemini")
+
+    assert list(llm.generate_stream("prompt", "sys")) == ["x"]
+
+
+def test_ollama_default_provider_still_used(monkeypatch) -> None:
+    from app.chat import llm
+    from app.config import settings
+
+    payload = {"model": "llama3", "response": "ollama reply"}
+    url = f"{settings.ollama_url}/api/generate"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == url
+        return httpx.Response(200, json=payload)
+
+    _mock_llm_client(monkeypatch, handler)
+    monkeypatch.setattr(settings, "llm_provider", "ollama")
+
+    assert llm.generate("prompt", "sys") == "ollama reply"
