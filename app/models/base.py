@@ -30,3 +30,7 @@ def get_db() -> Generator[Session]:
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    if settings.database_url.startswith("postgresql"):
+        from app.knowledge_base import store
+
+        store.init_vector_store()

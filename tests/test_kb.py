@@ -34,7 +34,7 @@ def test_search_maps_results(monkeypatch) -> None:
             }
 
     fake = FakeCollection()
-    monkeypatch.setattr("app.knowledge_base.retriever.get_collection", lambda: fake)
+    monkeypatch.setattr("app.knowledge_base.store.get_collection", lambda: fake)
     monkeypatch.setattr("app.knowledge_base.retriever.get_embedding", lambda text: [0.0] * 8)
 
     results = search("query", language="en", top_k=2)
@@ -54,7 +54,7 @@ def test_search_without_language_no_filter(monkeypatch) -> None:
             return {"documents": [[]], "metadatas": [[]], "distances": [[]]}
 
     fake = FakeCollection()
-    monkeypatch.setattr("app.knowledge_base.retriever.get_collection", lambda: fake)
+    monkeypatch.setattr("app.knowledge_base.store.get_collection", lambda: fake)
     monkeypatch.setattr("app.knowledge_base.retriever.get_embedding", lambda text: [0.0])
     search("query", top_k=3)
     assert fake.called_with["where"] is None
@@ -94,7 +94,7 @@ def test_ingest_documents_stats_and_upsert(tmp_path, monkeypatch) -> None:
         def upsert(self, **kwargs: object) -> None:
             upserts.append(kwargs)
 
-    monkeypatch.setattr("app.knowledge_base.ingest.get_collection", lambda: FakeCollection())
+    monkeypatch.setattr("app.knowledge_base.store.get_collection", lambda: FakeCollection())
     monkeypatch.setattr(
         "app.knowledge_base.ingest.get_embedding",
         lambda text: [0.5, 0.25] * 4,
@@ -201,3 +201,53 @@ def test_ollama_default_embedding_still_used(monkeypatch) -> None:
         "model": "nomic-embed-text",
         "prompt": "hello",
     }
+
+
+def test_store_detects_postgres_url(monkeypatch) -> None:
+    from app.config import settings
+    from app.knowledge_base import store
+
+    monkeypatch.setattr(settings, "database_url", "postgresql+psycopg://u:p@h/db")
+    assert store._is_postgres() is True
+
+
+def test_store_detects_sqlite_url(monkeypatch) -> None:
+    from app.config import settings
+    from app.knowledge_base import store
+
+    monkeypatch.setattr(settings, "database_url", "sqlite:///./data/db.sqlite")
+    assert store._is_postgres() is False
+
+
+def test_upsert_chroma_delegation(monkeypatch) -> None:
+    from app.config import settings
+    from app.knowledge_base import store
+
+    captured: dict[str, object] = {}
+
+    class FakeCollection:
+        def upsert(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(settings, "database_url", "sqlite:///./data/db.sqlite")
+    monkeypatch.setattr("app.knowledge_base.store.get_collection", lambda: FakeCollection())
+
+    store.upsert(
+        ids=["en_hr_0"],
+        embeddings=[[0.1, 0.2]],
+        documents=["text"],
+        metadatas=[{"source": "hr.md", "language": "en"}],
+    )
+
+    assert captured["ids"] == ["en_hr_0"]
+    assert captured["documents"] == ["text"]
+
+
+def test_knowledge_chunk_schema() -> None:
+    from app.knowledge_base.store import KnowledgeChunk
+
+    assert KnowledgeChunk.__tablename__ == "knowledge_chunks"
+    columns = {c.name: c for c in KnowledgeChunk.__table__.columns}
+    assert {"chunk_id", "language", "source", "content", "embedding"} <= set(columns)
+    constraint = KnowledgeChunk.__table__.constraints
+    assert any(getattr(c, "name", "") == "uq_knowledge_chunk_id" for c in constraint)

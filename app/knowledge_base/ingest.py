@@ -1,21 +1,14 @@
 from pathlib import Path
 
-import chromadb
 import httpx
 
 from app.config import settings
+from app.knowledge_base import store
 
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 100
 
-COLLECTION_NAME = "onboarding_knowledge"
-
 GEMINI_OPENAI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
-
-
-def get_collection() -> chromadb.Collection:
-    client = chromadb.PersistentClient(path=settings.chroma_persist_dir)
-    return client.get_or_create_collection(name=COLLECTION_NAME)
 
 
 def _get_ollama_embedding(text: str) -> list[float]:
@@ -68,7 +61,6 @@ def chunk_text(text: str) -> list[str]:
 
 def ingest_documents(docs_dir: str = "data/documents") -> dict[str, int]:
     docs_path = Path(docs_dir)
-    collection = get_collection()
 
     stats: dict[str, int] = {"files": 0, "chunks": 0}
 
@@ -84,7 +76,7 @@ def ingest_documents(docs_dir: str = "data/documents") -> dict[str, int]:
             ids: list[str] = []
             embeddings: list[list[float]] = []
             documents: list[str] = []
-            metadatas: list[dict[str, str | int | float | bool | None]] = []
+            metadatas: list[dict[str, object]] = []
 
             for i, chunk in enumerate(chunks):
                 ids.append(f"{language}_{md_file.stem}_{i}")
@@ -92,12 +84,7 @@ def ingest_documents(docs_dir: str = "data/documents") -> dict[str, int]:
                 documents.append(chunk)
                 metadatas.append({"source": md_file.name, "language": language})
 
-            collection.upsert(
-                ids=ids,
-                embeddings=embeddings,  # type: ignore[arg-type]
-                documents=documents,
-                metadatas=metadatas,  # type: ignore[arg-type]
-            )
+            store.upsert(ids, embeddings, documents, metadatas)
 
             stats["files"] += 1
             stats["chunks"] += len(chunks)
