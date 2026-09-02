@@ -118,6 +118,9 @@ async def websocket_chat(websocket: WebSocket) -> None:
         while True:
             data = await websocket.receive_text()
             msg: dict[str, str] = json.loads(data)
+            if msg.get("type") == "ping" or msg.get("message", "") == "__ping__":
+                await websocket.send_text(WSMessage(type="pong", content="").model_dump_json())
+                continue
             user_message = msg.get("message", "")
 
             ws_host = websocket.client.host if websocket.client else "unknown"

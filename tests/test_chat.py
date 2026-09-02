@@ -107,6 +107,30 @@ def test_ws_streams_tokens(client, auth_token, patch_search, patch_generate_stre
     assert "".join(frame["content"] for frame in frames) == "Hello world"
 
 
+def test_ws_handles_ping_pong(
+    client,
+    auth_token,
+    patch_search,
+    patch_generate_stream,
+) -> None:
+    token = auth_token()
+    patch_search()
+    patch_generate_stream(tokens=["hi"])
+
+    with client.websocket_connect("/api/chat/ws") as websocket:
+        websocket.send_json({"type": "auth", "content": token})
+        websocket.send_json({"type": "ping", "content": ""})
+        ping = websocket.receive_json()
+        websocket.send_json({"message": "hello"})
+        while True:
+            frame = websocket.receive_json()
+            if frame["type"] == "done":
+                break
+
+    assert ping["type"] == "pong"
+    assert frame["type"] == "done"
+
+
 def test_ws_sends_error_frame_on_llm_failure(
     client,
     auth_token,
