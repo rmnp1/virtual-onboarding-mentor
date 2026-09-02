@@ -84,6 +84,42 @@ The app refuses to start until `SECRET_KEY` is set (a missing or short key raise
 
 Open <http://localhost:8000>, register an account, and start onboarding.
 
+## Production deployment
+
+```bash
+# generate a strong secret key
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+
+# set restrictive permissions on .env
+chmod 600 .env
+```
+
+Required production `.env` settings:
+
+```
+SECRET_KEY=<your-generated-key>
+EXPOSE_DOCS=false
+```
+
+Optional:
+
+```
+INVITE_REQUIRED=true
+INVITE_CODES=alpha,beta,gamma
+CORS_ORIGINS=https://app.example.com
+```
+
+Run without `--reload` and bind to a loopback address, placing a TLS-terminating reverse
+proxy (nginx, Caddy) in front:
+
+```bash
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+SQLite is suitable for small deployments. For larger scale, swap `DATABASE_URL` to PostgreSQL
+and update the SQLAlchemy driver accordingly. Back up `data/db.sqlite` and `data/chroma/`
+regularly.
+
 ## Configuration
 
 All settings are read from environment variables (optionally via `.env`); see `app/config.py`.

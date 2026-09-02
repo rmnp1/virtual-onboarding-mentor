@@ -1,5 +1,15 @@
 import { api, el, go, setMe, setToken } from "../lib.js";
 
+let authConfig = { invite_required: false };
+
+async function loadConfig() {
+  try {
+    authConfig = await api("/api/auth/config");
+  } catch {
+    authConfig = { invite_required: false };
+  }
+}
+
 function loginForm() {
   return `
     <label>Email
@@ -12,6 +22,12 @@ function loginForm() {
 }
 
 function registerForm() {
+  const inviteField = authConfig.invite_required
+    ? `
+    <label>Invite code
+      <input name="invite_code" required />
+    </label>`
+    : "";
   return `
     <label>Email
       <input name="email" type="email" required />
@@ -27,6 +43,7 @@ function registerForm() {
         <input name="department" />
       </label>
     </div>
+    ${inviteField}
     <label>Language
       <select name="language">
         <option value="pl">Polski</option>
@@ -89,6 +106,7 @@ export const AuthView = {
               full_name: String(fd.get("full_name") || "").trim() || null,
               department: String(fd.get("department") || "").trim() || null,
               language: fd.get("language"),
+              invite_code: String(fd.get("invite_code") || "").trim() || null,
             },
           });
           await login(
@@ -113,7 +131,7 @@ export const AuthView = {
       }
     });
 
-    renderMode();
+    loadConfig().then(() => renderMode());
     container.appendChild(card);
   },
 };

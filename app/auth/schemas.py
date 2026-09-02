@@ -19,6 +19,7 @@ class UserCreate(BaseModel):
     full_name: str | None = None
     department: str | None = None
     language: Literal["pl", "en"] | None = None
+    invite_code: str | None = None
 
     model_config = {"extra": "forbid"}
 

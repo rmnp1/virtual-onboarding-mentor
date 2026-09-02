@@ -160,3 +160,48 @@ def test_me_requires_token(client) -> None:
 def test_me_invalid_token(client) -> None:
     response = client.get("/api/auth/me", headers={"Authorization": "Bearer bad.token"})
     assert response.status_code == 401
+
+
+def test_auth_config_default(client) -> None:
+    response = client.get("/api/auth/config")
+    assert response.status_code == 200
+    assert response.json() == {"invite_required": False}
+
+
+def test_auth_config_invite_required(client, monkeypatch) -> None:
+    monkeypatch.setattr("app.auth.routes.settings.invite_required", True)
+    response = client.get("/api/auth/config")
+    assert response.status_code == 200
+    assert response.json() == {"invite_required": True}
+
+
+def test_register_requires_invite_code(client, monkeypatch) -> None:
+    monkeypatch.setattr("app.auth.routes.settings.invite_required", True)
+    monkeypatch.setattr("app.auth.routes.settings.invite_codes", "SECRET123")
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "inv@example.com", "password": "password1"},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Valid invite code required"
+
+
+def test_register_rejects_invalid_invite_code(client, monkeypatch) -> None:
+    monkeypatch.setattr("app.auth.routes.settings.invite_required", True)
+    monkeypatch.setattr("app.auth.routes.settings.invite_codes", "SECRET123")
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "inv@example.com", "password": "password1", "invite_code": "WRONG"},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Valid invite code required"
+
+
+def test_register_accepts_valid_invite_code(client, monkeypatch) -> None:
+    monkeypatch.setattr("app.auth.routes.settings.invite_required", True)
+    monkeypatch.setattr("app.auth.routes.settings.invite_codes", "alpha,BETA")
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "inv@example.com", "password": "password1", "invite_code": "beta"},
+    )
+    assert response.status_code == 201

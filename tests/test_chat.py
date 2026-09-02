@@ -149,3 +149,33 @@ def test_ws_sends_error_frame_on_search_failure(
 
     assert frame["type"] == "error"
     assert frame["content"] == "LLM service unavailable"
+
+
+def test_chat_rest_rate_limited(client, auth_headers, patch_search, patch_generate) -> None:
+    headers = auth_headers()
+    patch_search()
+    patch_generate("ok")
+    for _ in range(20):
+        response = client.post("/api/chat", headers=headers, json={"message": "hi"})
+        assert response.status_code == 200
+    response = client.post("/api/chat", headers=headers, json={"message": "hi"})
+    assert response.status_code == 429
+
+
+def test_ws_chat_rate_limited(client, auth_token, patch_search, patch_generate_stream) -> None:
+    from app.auth.ratelimit import chat_ip
+
+    token = auth_token()
+    patch_search()
+    patch_generate_stream(tokens=["ok"])
+
+    for _ in range(20):
+        chat_ip.allowed("testclient")
+
+    with client.websocket_connect("/api/chat/ws") as websocket:
+        websocket.send_json({"type": "auth", "content": token})
+        websocket.send_json({"message": "hi"})
+        frame = websocket.receive_json()
+
+    assert frame["type"] == "error"
+    assert frame["content"] == "Too many requests"

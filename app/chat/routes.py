@@ -3,11 +3,20 @@ import json
 from collections import defaultdict
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
+from app.auth.ratelimit import chat_ip, check_rate_limit, ip_enforce
 from app.chat.context import build_context
 from app.chat.llm import generate, generate_stream
 from app.chat.schemas import ChatRequest, ChatResponse, WSMessage
@@ -48,9 +57,11 @@ def _handle_message(
 @router.post("", response_model=ChatResponse)
 def chat(
     body: ChatRequest,
+    request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ChatResponse:
+    ip_enforce(chat_ip, request)
     history = chat_history[user.id]
     profile = get_profile(db, user)
     try:
@@ -108,6 +119,14 @@ async def websocket_chat(websocket: WebSocket) -> None:
             data = await websocket.receive_text()
             msg: dict[str, str] = json.loads(data)
             user_message = msg.get("message", "")
+
+            ws_host = websocket.client.host if websocket.client else "unknown"
+            try:
+                check_rate_limit(chat_ip, ws_host)
+            except Exception:
+                error_msg = WSMessage(type="error", content="Too many requests")
+                await websocket.send_text(error_msg.model_dump_json())
+                continue
 
             try:
                 context, chunks = build_context(user_message, language, history)

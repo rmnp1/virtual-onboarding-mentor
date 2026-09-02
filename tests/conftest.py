@@ -35,9 +35,9 @@ def _clear_chat_history() -> Iterator[None]:
 
 @pytest.fixture(autouse=True)
 def _clear_rate_limits() -> Iterator[None]:
-    from app.auth.ratelimit import login_email, login_ip, register_ip
+    from app.auth.ratelimit import chat_ip, login_email, login_ip, register_ip
 
-    for limiter in (register_ip, login_ip, login_email):
+    for limiter in (register_ip, login_ip, login_email, chat_ip):
         limiter.clear()
     yield
 

@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 1440
     chroma_persist_dir: str = "./data/chroma"
     cors_origins: str = ""
+    expose_docs: bool = True
+    invite_required: bool = False
+    invite_codes: str = ""
 
     model_config = {"env_file": ".env"}
 
