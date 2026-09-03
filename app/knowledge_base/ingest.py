@@ -1,4 +1,5 @@
 import logging
+import time
 from pathlib import Path
 
 import httpx
@@ -12,6 +13,32 @@ CHUNK_SIZE = 500
 CHUNK_OVERLAP = 100
 
 GEMINI_OPENAI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
+
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def _response_snippet(response: httpx.Response | None, limit: int = 500) -> str:
+    if response is None:
+        return ""
+    body = ""
+    try:
+        body = response.text[:limit]
+    except Exception:
+        try:
+            body = response.content[:limit].decode("utf-8", errors="replace")
+        except Exception:
+            body = "<unreadable>"
+    return body
+
+
+def _is_retryable(status_code: int | None) -> bool:
+    return status_code is not None and status_code in _RETRYABLE_STATUS
+
+
+def _retry_delay(attempt: int) -> float:
+    configured: float = settings.gemini_retry_base_delay
+    base = max(configured, 0.1)
+    return float(base * (2 ** (attempt - 1)))
 
 
 def _get_ollama_embedding(text: str) -> list[float]:
@@ -30,38 +57,47 @@ def _get_gemini_embedding(text: str) -> list[float]:
         "Authorization": f"Bearer {settings.embedding_api_key}",
         "Content-Type": "application/json",
     }
-    try:
-        response = httpx.post(
-            f"{GEMINI_OPENAI_BASE}/embeddings",
-            headers=headers,
-            json={"model": settings.embedding_model, "input": text},
-            timeout=120.0,
-        )
-        response.raise_for_status()
-    except httpx.HTTPError as exc:
-        resp = getattr(exc, "response", None)
-        detail = ""
-        if resp is not None:
-            body = ""
-            try:
-                body = resp.text[:500]
-            except Exception:
-                body = "<unreadable>"
-            detail = f" status={resp.status_code} url={resp.url} body={body!r}"
-        logger.error(
-            "gemini embeddings failed: %s%s: %s",
-            type(exc).__name__,
-            detail,
-            exc,
-            exc_info=exc,
-        )
-        raise
-    data: dict[str, object] = response.json()
-    items = data.get("data")
-    if isinstance(items, list) and items and isinstance(items[0], dict):
-        embedding = items[0].get("embedding")
-        if isinstance(embedding, list):
-            return [float(x) for x in embedding]
+    url = f"{GEMINI_OPENAI_BASE}/embeddings"
+    for attempt in range(1, settings.gemini_max_retries + 1):
+        try:
+            response = httpx.post(
+                url,
+                headers=headers,
+                json={"model": settings.embedding_model, "input": text},
+                timeout=120.0,
+            )
+            response.raise_for_status()
+            data: dict[str, object] = response.json()
+            items = data.get("data")
+            if isinstance(items, list) and items and isinstance(items[0], dict):
+                embedding = items[0].get("embedding")
+                if isinstance(embedding, list):
+                    return [float(x) for x in embedding]
+            return []
+        except httpx.HTTPError as exc:
+            resp = getattr(exc, "response", None)
+            status = resp.status_code if resp is not None else None
+            if _is_retryable(status) and attempt < settings.gemini_max_retries:
+                logger.warning(
+                    "gemini embeddings got %s on attempt %d/%d, retrying in %.1fs",
+                    status,
+                    attempt,
+                    settings.gemini_max_retries,
+                    _retry_delay(attempt),
+                )
+                time.sleep(_retry_delay(attempt))
+                continue
+            body = _response_snippet(resp)
+            logger.error(
+                "gemini embeddings failed: %s status=%s url=%s body=%r: %s",
+                type(exc).__name__,
+                status,
+                url,
+                body,
+                exc,
+                exc_info=exc,
+            )
+            raise
     return []
 
 

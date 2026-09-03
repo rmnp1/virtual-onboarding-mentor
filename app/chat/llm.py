@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from collections.abc import Generator
 
 import httpx
@@ -12,22 +13,53 @@ OLLAMA_GENERATE_URL = f"{settings.ollama_url}/api/generate"
 
 GEMINI_OPENAI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def _response_snippet(response: httpx.Response | None, limit: int = 500) -> str:
+    if response is None:
+        return ""
+    body = ""
+    try:
+        text = response.text
+        body = text[:limit]
+    except Exception:
+        try:
+            content = response.content
+            body = content[:limit].decode("utf-8", errors="replace")
+        except Exception:
+            body = "<unreadable>"
+    return body
+
+
+def _is_retryable(status_code: int | None) -> bool:
+    return status_code is not None and status_code in _RETRYABLE_STATUS
+
+
+def _is_retryable_exc(exc: httpx.HTTPError) -> bool:
+    response = getattr(exc, "response", None)
+    if response is not None:
+        return _is_retryable(response.status_code)
+    return isinstance(exc, (httpx.TimeoutException, httpx.ConnectError))
+
+
+def _retry_delay(attempt: int) -> float:
+    configured: float = settings.gemini_retry_base_delay
+    base = max(configured, 0.1)
+    return float(base * (2 ** (attempt - 1)))
+
 
 def _log_httpx_failure(operation: str, exc: httpx.HTTPError) -> None:
     response = getattr(exc, "response", None)
-    detail = ""
-    if response is not None:
-        body = ""
-        try:
-            body = response.text[:500]
-        except Exception:
-            body = "<unreadable>"
-        detail = f" status={response.status_code} url={response.url} body={body!r}"
+    status_code = response.status_code if response is not None else "n/a"
+    body = _response_snippet(response)
     logger.error(
-        "gemini %s failed: %s%s: %s",
+        "gemini %s failed: %s status=%s url=%s body=%r: %s",
         operation,
         type(exc).__name__,
-        detail,
+        status_code,
+        response.url if response is not None else "n/a",
+        body,
         exc,
         exc_info=exc,
     )
@@ -90,69 +122,104 @@ def _gemini_messages(prompt: str, system: str) -> list[dict[str, str]]:
 
 
 def _gemini_generate(prompt: str, system: str) -> str:
-    try:
-        with httpx.Client(timeout=120.0) as client:
-            response = client.post(
-                f"{GEMINI_OPENAI_BASE}/chat/completions",
-                headers=_gemini_headers(),
-                json={
-                    "model": settings.llm_model,
-                    "messages": _gemini_messages(prompt, system),
-                    "stream": False,
-                },
+    url = f"{GEMINI_OPENAI_BASE}/chat/completions"
+    payload = {
+        "model": settings.llm_model,
+        "messages": _gemini_messages(prompt, system),
+        "stream": False,
+    }
+    last_exc: httpx.HTTPError | None = None
+    for attempt in range(1, settings.gemini_max_retries + 1):
+        try:
+            with httpx.Client(timeout=120.0) as client:
+                response = client.post(url, headers=_gemini_headers(), json=payload)
+                response.raise_for_status()
+            data: dict[str, object] = response.json()
+            choices = data.get("choices")
+            if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+                message = choices[0].get("message")
+                if isinstance(message, dict):
+                    content = message.get("content")
+                    if content is not None:
+                        return str(content)
+            return ""
+        except httpx.HTTPError as exc:
+            last_exc = exc
+            resp = getattr(exc, "response", None)
+            status = resp.status_code if resp is not None else None
+            if not _is_retryable(status) or attempt == settings.gemini_max_retries:
+                _log_httpx_failure("chat/generate", exc)
+                raise
+            logger.warning(
+                "gemini chat/generate got %s on attempt %d/%d, retrying in %.1fs",
+                status,
+                attempt,
+                settings.gemini_max_retries,
+                _retry_delay(attempt),
             )
-            response.raise_for_status()
-    except httpx.HTTPError as exc:
-        _log_httpx_failure("chat/generate", exc)
-        raise
-    data: dict[str, object] = response.json()
-    choices = data.get("choices")
-    if isinstance(choices, list) and choices and isinstance(choices[0], dict):
-        message = choices[0].get("message")
-        if isinstance(message, dict):
-            content = message.get("content")
-            if content is not None:
-                return str(content)
-    return ""
+            time.sleep(_retry_delay(attempt))
+    assert last_exc is not None
+    _log_httpx_failure("chat/generate", last_exc)
+    raise last_exc
 
 
 def _gemini_generate_stream(prompt: str, system: str) -> Generator[str]:
-    try:
-        with (
-            httpx.Client(timeout=120.0) as client,
-            client.stream(
-                "POST",
-                f"{GEMINI_OPENAI_BASE}/chat/completions",
-                headers=_gemini_headers(),
-                json={
-                    "model": settings.llm_model,
-                    "messages": _gemini_messages(prompt, system),
-                    "stream": True,
-                },
-            ) as response,
-        ):
-            response.raise_for_status()
-            for line in response.iter_lines():
-                if not line or not line.startswith("data:"):
-                    continue
-                payload = line[len("data:") :].strip()
-                if not payload or payload == "[DONE]":
-                    return
-                try:
-                    chunk: dict[str, object] = json.loads(payload)
-                except json.JSONDecodeError:
-                    continue
-                choices = chunk.get("choices")
-                if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-                    continue
-                delta = choices[0].get("delta")
-                if isinstance(delta, dict):
-                    token = delta.get("content")
-                    if token:
-                        yield str(token)
-    except httpx.HTTPError as exc:
-        _log_httpx_failure("chat/generate_stream", exc)
-        raise
+    url = f"{GEMINI_OPENAI_BASE}/chat/completions"
+    payload = {
+        "model": settings.llm_model,
+        "messages": _gemini_messages(prompt, system),
+        "stream": True,
+    }
+    for attempt in range(1, settings.gemini_max_retries + 1):
+        try:
+            with (
+                httpx.Client(timeout=120.0) as client,
+                client.stream(
+                    "POST",
+                    url,
+                    headers=_gemini_headers(),
+                    json=payload,
+                ) as response,
+            ):
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    payload_line = line[len("data:") :].strip()
+                    if not payload_line or payload_line == "[DONE]":
+                        return
+                    try:
+                        chunk: dict[str, object] = json.loads(payload_line)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = chunk.get("choices")
+                    if (
+                        not isinstance(choices, list)
+                        or not choices
+                        or not isinstance(choices[0], dict)
+                    ):
+                        continue
+                    delta = choices[0].get("delta")
+                    if isinstance(delta, dict):
+                        token = delta.get("content")
+                        if token:
+                            yield str(token)
+            return
+        except httpx.HTTPError as exc:
+            resp = getattr(exc, "response", None)
+            status = resp.status_code if resp is not None else None
+            if _is_retryable(status) and attempt < settings.gemini_max_retries:
+                logger.warning(
+                    "gemini chat/generate_stream got %s on attempt %d/%d, retrying in %.1fs",
+                    status,
+                    attempt,
+                    settings.gemini_max_retries,
+                    _retry_delay(attempt),
+                )
+                time.sleep(_retry_delay(attempt))
+                continue
+            _log_httpx_failure("chat/generate_stream", exc)
+            raise
 
 
 def generate_stream(prompt: str, system: str) -> Generator[str]:

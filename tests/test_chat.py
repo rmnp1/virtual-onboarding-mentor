@@ -3,6 +3,7 @@ import json
 import httpx
 
 from app.chat.context import build_context
+from app.chat.llm import _is_retryable, _response_snippet
 from app.chat.prompts import get_system_prompt
 
 
@@ -86,6 +87,21 @@ def test_chat_rest_llm_unavailable(client, auth_headers, monkeypatch) -> None:
     response = client.post("/api/chat", headers=auth_headers(), json={"message": "hello"})
     assert response.status_code == 503
     assert response.json()["detail"] == "LLM service unavailable"
+
+
+def test_is_retryable_flag() -> None:
+    assert _is_retryable(503) is True
+    assert _is_retryable(502) is True
+    assert _is_retryable(429) is True
+    assert _is_retryable(500) is True
+    assert _is_retryable(400) is False
+    assert _is_retryable(404) is False
+    assert _is_retryable(None) is False
+
+
+def test_response_snippet_reads_body() -> None:
+    response = httpx.Response(503, content=b'{"error": {"message": "quota exceeded"}}')
+    assert "quota exceeded" in _response_snippet(response)
 
 
 def test_chat_rest_logs_real_exception(client, auth_headers, monkeypatch, caplog) -> None:
