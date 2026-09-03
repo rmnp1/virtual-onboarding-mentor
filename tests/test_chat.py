@@ -88,6 +88,19 @@ def test_chat_rest_llm_unavailable(client, auth_headers, monkeypatch) -> None:
     assert response.json()["detail"] == "LLM service unavailable"
 
 
+def test_chat_rest_logs_real_exception(client, auth_headers, monkeypatch, caplog) -> None:
+    def raise_connect_error(*args: object, **kwargs: object) -> None:
+        raise httpx.ConnectError("boom")
+
+    monkeypatch.setattr("app.chat.context.search", raise_connect_error)
+    with caplog.at_level("ERROR", logger="app.chat.routes"):
+        response = client.post("/api/chat", headers=auth_headers(), json={"message": "hello"})
+
+    assert response.status_code == 503
+    records = [r for r in caplog.records if r.name == "app.chat.routes"]
+    assert any("ConnectError" in r.getMessage() for r in records)
+
+
 def test_ws_streams_tokens(client, auth_token, patch_search, patch_generate_stream) -> None:
     token = auth_token()
     patch_search()
@@ -148,6 +161,29 @@ def test_ws_sends_error_frame_on_llm_failure(
 
     assert frame["type"] == "error"
     assert frame["content"] == "LLM service unavailable"
+
+
+def test_ws_logs_stream_exception(
+    client,
+    auth_token,
+    patch_search,
+    patch_generate_stream,
+    caplog,
+) -> None:
+    token = auth_token()
+    patch_search()
+    patch_generate_stream(exc=RuntimeError("boom"))
+
+    with (
+        caplog.at_level("ERROR", logger="app.chat.routes"),
+        client.websocket_connect("/api/chat/ws") as websocket,
+    ):
+        websocket.send_json({"type": "auth", "content": token})
+        websocket.send_json({"message": "hello"})
+        websocket.receive_json()
+
+    records = [r for r in caplog.records if r.name == "app.chat.routes"]
+    assert any("RuntimeError" in r.getMessage() for r in records)
 
 
 def test_ws_rejects_invalid_token(client) -> None:

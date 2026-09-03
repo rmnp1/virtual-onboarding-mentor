@@ -1,6 +1,8 @@
 import asyncio
 import json
+import logging
 from collections import defaultdict
+from contextlib import suppress
 
 import httpx
 from fastapi import (
@@ -13,6 +15,7 @@ from fastapi import (
     status,
 )
 from jose import JWTError, jwt
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
@@ -25,6 +28,8 @@ from app.models.base import SessionLocal, get_db
 from app.models.user import User
 from app.models.user_profile import UserProfile
 from app.personalization.service import build_system_prompt, get_profile
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -66,11 +71,18 @@ def chat(
     profile = get_profile(db, user)
     try:
         reply, sources = _handle_message(user, body.message, history, profile)
-    except httpx.HTTPError:
+    except (httpx.HTTPError, SQLAlchemyError) as exc:
+        logger.error(
+            "chat request failed for user=%s: %s: %s",
+            user.id,
+            type(exc).__name__,
+            exc,
+            exc_info=exc,
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="LLM service unavailable",
-        ) from None
+        ) from exc
     return ChatResponse(reply=reply, sources=sources)
 
 
@@ -117,7 +129,18 @@ async def websocket_chat(websocket: WebSocket) -> None:
     try:
         while True:
             data = await websocket.receive_text()
-            msg: dict[str, str] = json.loads(data)
+            try:
+                msg = json.loads(data)
+            except (json.JSONDecodeError, TypeError) as exc:
+                logger.warning(
+                    "ws received invalid json from user=%s host=%s: %s",
+                    user.id,
+                    websocket.client.host if websocket.client else "unknown",
+                    exc,
+                )
+                continue
+            if not isinstance(msg, dict):
+                continue
             if msg.get("type") == "ping" or msg.get("message", "") == "__ping__":
                 await websocket.send_text(WSMessage(type="pong", content="").model_dump_json())
                 continue
@@ -133,8 +156,36 @@ async def websocket_chat(websocket: WebSocket) -> None:
 
             try:
                 context, chunks = build_context(user_message, language, history)
-            except httpx.HTTPError:
+            except httpx.HTTPError as exc:
+                logger.error(
+                    "ws context build failed (http) user=%s: %s: %s",
+                    user.id,
+                    type(exc).__name__,
+                    exc,
+                    exc_info=exc,
+                )
                 error_msg = WSMessage(type="error", content="LLM service unavailable")
+                await websocket.send_text(error_msg.model_dump_json())
+                continue
+            except SQLAlchemyError as exc:
+                logger.error(
+                    "ws context build failed (db) user=%s: %s: %s",
+                    user.id,
+                    type(exc).__name__,
+                    exc,
+                    exc_info=exc,
+                )
+                error_msg = WSMessage(type="error", content="Retrieval failed")
+                await websocket.send_text(error_msg.model_dump_json())
+                continue
+            except Exception as exc:
+                logger.error(
+                    "ws context build failed (unexpected) user=%s: %s",
+                    user.id,
+                    exc,
+                    exc_info=exc,
+                )
+                error_msg = WSMessage(type="error", content="Retrieval failed")
                 await websocket.send_text(error_msg.model_dump_json())
                 continue
 
@@ -147,7 +198,28 @@ async def websocket_chat(websocket: WebSocket) -> None:
                     await websocket.send_text(
                         WSMessage(type="token", content=token_text).model_dump_json()
                     )
-            except Exception:
+            except httpx.HTTPError as exc:
+                response = getattr(exc, "response", None)
+                status_code = response.status_code if response is not None else "n/a"
+                logger.error(
+                    "ws stream failed (http) user=%s status=%s: %s: %s",
+                    user.id,
+                    status_code,
+                    type(exc).__name__,
+                    exc,
+                    exc_info=exc,
+                )
+                error_msg = WSMessage(type="error", content="LLM service unavailable")
+                await websocket.send_text(error_msg.model_dump_json())
+                continue
+            except Exception as exc:
+                logger.error(
+                    "ws stream failed (unexpected) user=%s: %s: %s",
+                    user.id,
+                    type(exc).__name__,
+                    exc,
+                    exc_info=exc,
+                )
                 error_msg = WSMessage(type="error", content="LLM service unavailable")
                 await websocket.send_text(error_msg.model_dump_json())
                 continue
@@ -162,4 +234,14 @@ async def websocket_chat(websocket: WebSocket) -> None:
             await websocket.send_text(WSMessage(type="done", content="").model_dump_json())
 
     except WebSocketDisconnect:
-        pass
+        logger.info("ws client disconnected user=%s", user.id)
+    except Exception as exc:
+        logger.error(
+            "ws loop crashed user=%s: %s: %s",
+            user.id,
+            type(exc).__name__,
+            exc,
+            exc_info=exc,
+        )
+        with suppress(Exception):
+            await websocket.close()

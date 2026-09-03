@@ -1,9 +1,12 @@
+import logging
 from pathlib import Path
 
 import httpx
 
 from app.config import settings
 from app.knowledge_base import store
+
+logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 100
@@ -27,13 +30,32 @@ def _get_gemini_embedding(text: str) -> list[float]:
         "Authorization": f"Bearer {settings.embedding_api_key}",
         "Content-Type": "application/json",
     }
-    response = httpx.post(
-        f"{GEMINI_OPENAI_BASE}/embeddings",
-        headers=headers,
-        json={"model": settings.embedding_model, "input": text},
-        timeout=120.0,
-    )
-    response.raise_for_status()
+    try:
+        response = httpx.post(
+            f"{GEMINI_OPENAI_BASE}/embeddings",
+            headers=headers,
+            json={"model": settings.embedding_model, "input": text},
+            timeout=120.0,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        resp = getattr(exc, "response", None)
+        detail = ""
+        if resp is not None:
+            body = ""
+            try:
+                body = resp.text[:500]
+            except Exception:
+                body = "<unreadable>"
+            detail = f" status={resp.status_code} url={resp.url} body={body!r}"
+        logger.error(
+            "gemini embeddings failed: %s%s: %s",
+            type(exc).__name__,
+            detail,
+            exc,
+            exc_info=exc,
+        )
+        raise
     data: dict[str, object] = response.json()
     items = data.get("data")
     if isinstance(items, list) and items and isinstance(items[0], dict):

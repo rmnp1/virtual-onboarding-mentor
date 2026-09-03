@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     expose_docs: bool = True
     invite_required: bool = False
     invite_codes: str = ""
+    log_level: str = "INFO"
 
     model_config = {"env_file": ".env"}
 

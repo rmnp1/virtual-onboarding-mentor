@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -17,6 +18,8 @@ from app.models.base import init_db
 from app.personalization.routes import router as personalization_router
 from app.scenarios.routes import router as scenarios_router
 
+logger = logging.getLogger(__name__)
+
 
 class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -27,7 +30,28 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def _configure_logging(cfg: Settings) -> None:
+    level = logging.INFO if cfg.log_level == "INFO" else logging.DEBUG
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    handler = logging.StreamHandler()
+    handler.setLevel(level)
+    handler.setFormatter(
+        logging.Formatter(
+            fmt="%(asctime)s %(levelname)-7s [%(name)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+
+    root.handlers = [handler]
+    for name in ("uvicorn.error", "uvicorn.access"):
+        logging.getLogger(name).propagate = False
+
+
 def build_app(cfg: Settings) -> FastAPI:
+    _configure_logging(cfg)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         init_db()
