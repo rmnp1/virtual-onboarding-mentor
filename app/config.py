@@ -17,8 +17,9 @@ class Settings(BaseSettings):
     embedding_model: str = "nomic-embed-text"
     embedding_api_key: str = ""
     embedding_dimension: int = 768
-    gemini_max_retries: int = 3
-    gemini_retry_base_delay: float = 1.0
+    gemini_max_retries: int = 5
+    gemini_retry_base_delay: float = 2.0
+    gemini_retry_growth: float = 3.0
     jwt_expire_minutes: int = 1440
     chroma_persist_dir: str = "./data/chroma"
     cors_origins: str = ""

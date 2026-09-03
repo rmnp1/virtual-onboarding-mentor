@@ -36,17 +36,11 @@ def _is_retryable(status_code: int | None) -> bool:
     return status_code is not None and status_code in _RETRYABLE_STATUS
 
 
-def _is_retryable_exc(exc: httpx.HTTPError) -> bool:
-    response = getattr(exc, "response", None)
-    if response is not None:
-        return _is_retryable(response.status_code)
-    return isinstance(exc, (httpx.TimeoutException, httpx.ConnectError))
-
-
 def _retry_delay(attempt: int) -> float:
     configured: float = settings.gemini_retry_base_delay
     base = max(configured, 0.1)
-    return float(base * (2 ** (attempt - 1)))
+    growth = max(float(settings.gemini_retry_growth), 1.5)
+    return float(base * (growth ** (attempt - 1)))
 
 
 def _log_httpx_failure(operation: str, exc: httpx.HTTPError) -> None:
@@ -172,18 +166,15 @@ def _gemini_generate_stream(prompt: str, system: str) -> Generator[str]:
     }
     for attempt in range(1, settings.gemini_max_retries + 1):
         try:
-            with (
-                httpx.Client(timeout=120.0) as client,
-                client.stream(
-                    "POST",
+            with httpx.Client(timeout=120.0) as client:
+                response = client.post(
                     url,
                     headers=_gemini_headers(),
                     json=payload,
-                ) as response,
-            ):
+                )
                 response.raise_for_status()
-                for line in response.iter_lines():
-                    if not line or not line.startswith("data:"):
+                for line in response.text.splitlines():
+                    if not line.startswith("data:"):
                         continue
                     payload_line = line[len("data:") :].strip()
                     if not payload_line or payload_line == "[DONE]":
@@ -208,18 +199,17 @@ def _gemini_generate_stream(prompt: str, system: str) -> Generator[str]:
         except httpx.HTTPError as exc:
             resp = getattr(exc, "response", None)
             status = resp.status_code if resp is not None else None
-            if _is_retryable(status) and attempt < settings.gemini_max_retries:
-                logger.warning(
-                    "gemini chat/generate_stream got %s on attempt %d/%d, retrying in %.1fs",
-                    status,
-                    attempt,
-                    settings.gemini_max_retries,
-                    _retry_delay(attempt),
-                )
-                time.sleep(_retry_delay(attempt))
-                continue
-            _log_httpx_failure("chat/generate_stream", exc)
-            raise
+            if not _is_retryable(status) or attempt == settings.gemini_max_retries:
+                _log_httpx_failure("chat/generate_stream", exc)
+                raise
+            logger.warning(
+                "gemini chat/generate_stream got %s on attempt %d/%d, retrying in %.1fs",
+                status,
+                attempt,
+                settings.gemini_max_retries,
+                _retry_delay(attempt),
+            )
+            time.sleep(_retry_delay(attempt))
 
 
 def generate_stream(prompt: str, system: str) -> Generator[str]:

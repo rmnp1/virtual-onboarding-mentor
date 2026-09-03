@@ -231,7 +231,13 @@ async def websocket_chat(websocket: WebSocket) -> None:
                     exc,
                     exc_info=exc,
                 )
-                error_msg = WSMessage(type="error", content="LLM service unavailable")
+                if status_code in (429, 503):
+                    error_msg = WSMessage(
+                        type="error",
+                        content="Gemini is busy or rate-limited. Please try again in a moment.",
+                    )
+                else:
+                    error_msg = WSMessage(type="error", content="LLM service unavailable")
                 await websocket.send_text(error_msg.model_dump_json())
                 continue
             except Exception as exc:

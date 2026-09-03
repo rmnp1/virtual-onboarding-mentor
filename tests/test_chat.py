@@ -238,6 +238,35 @@ def test_ws_sends_error_frame_on_llm_failure(
     assert frame["content"] == "LLM service unavailable"
 
 
+def test_ws_sends_friendly_message_on_429(
+    client,
+    auth_token,
+    patch_search,
+    monkeypatch,
+) -> None:
+    def raise_rate_limited(*args: object, **kwargs: object) -> object:
+        request = httpx.Request(
+            "POST",
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        )
+        response = httpx.Response(
+            429, content=b'{"error": {"message": "quota exceeded"}}', request=request
+        )
+        raise httpx.HTTPStatusError("429 Too Many Requests", request=request, response=response)
+
+    monkeypatch.setattr("app.chat.routes.generate_stream", raise_rate_limited)
+    token = auth_token()
+    patch_search()
+
+    with client.websocket_connect("/api/chat/ws") as websocket:
+        websocket.send_json({"type": "auth", "content": token})
+        websocket.send_json({"message": "hello"})
+        frame = websocket.receive_json()
+
+    assert frame["type"] == "error"
+    assert "rate-limited" in frame["content"]
+
+
 def test_ws_logs_stream_exception(
     client,
     auth_token,
