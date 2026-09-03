@@ -84,6 +84,10 @@ def build_app(cfg: Settings) -> FastAPI:
     app.include_router(feedback_router)
     app.include_router(metrics_router)
 
+    @app.get("/healthz")
+    async def healthz() -> dict[str, str]:
+        return {"status": "ok"}
+
     app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 
     return app

@@ -5,6 +5,7 @@ import httpx
 from app.chat.context import build_context
 from app.chat.llm import _is_retryable, _response_snippet
 from app.chat.prompts import get_system_prompt
+from app.chat.routes import _clean_pending_history
 
 
 def test_system_prompt_fallback() -> None:
@@ -104,6 +105,25 @@ def test_response_snippet_reads_body() -> None:
     assert "quota exceeded" in _response_snippet(response)
 
 
+def test_clean_pending_history_filters_invalid() -> None:
+    result = _clean_pending_history(
+        [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+            {"role": "admin", "content": "x"},
+            {"role": "user", "content": 123},
+            "garbage",
+            {"role": "user", "content": ""},
+        ]
+    )
+    assert result == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "hi"},
+    ]
+    assert _clean_pending_history("not-a-list") == []
+    assert _clean_pending_history(None) == []
+
+
 def test_chat_rest_logs_real_exception(client, auth_headers, monkeypatch, caplog) -> None:
     def raise_connect_error(*args: object, **kwargs: object) -> None:
         raise httpx.ConnectError("boom")
@@ -115,6 +135,45 @@ def test_chat_rest_logs_real_exception(client, auth_headers, monkeypatch, caplog
     assert response.status_code == 503
     records = [r for r in caplog.records if r.name == "app.chat.routes"]
     assert any("ConnectError" in r.getMessage() for r in records)
+
+
+def test_ws_uses_pending_history_from_auth(
+    client,
+    auth_token,
+    patch_search,
+    patch_generate_stream,
+    monkeypatch,
+) -> None:
+    token = auth_token()
+    patch_search([])
+    patch_generate_stream(tokens=["ok"])
+    captured: dict[str, object] = {}
+
+    def fake_build_context(
+        query: str,
+        language: str,
+        history: list[dict[str, str]],
+        top_k: int = 3,
+    ):
+        captured["history"] = list(history)
+        return "ctx", []
+
+    monkeypatch.setattr("app.chat.routes.build_context", fake_build_context)
+
+    history_from_client = [
+        {"role": "user", "content": "earlier question"},
+        {"role": "assistant", "content": "earlier answer"},
+    ]
+
+    with client.websocket_connect("/api/chat/ws") as websocket:
+        websocket.send_json({"type": "auth", "content": token, "history": history_from_client})
+        websocket.send_json({"message": "hello"})
+        while True:
+            frame = websocket.receive_json()
+            if frame["type"] == "done":
+                break
+
+    assert captured.get("history") == history_from_client
 
 
 def test_ws_streams_tokens(client, auth_token, patch_search, patch_generate_stream) -> None:

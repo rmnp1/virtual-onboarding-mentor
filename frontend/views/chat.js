@@ -98,7 +98,11 @@ export const ChatView = {
       socket = ws;
 
       ws.addEventListener("open", () => {
-        ws.send(JSON.stringify({ type: "auth", content: getToken() }));
+        const historyForServer = (history ?? []).slice(-MAX_HISTORY).map((m) => ({
+          role: m.type === "user" ? "user" : "assistant",
+          content: m.text,
+        }));
+        ws.send(JSON.stringify({ type: "auth", content: getToken(), history: historyForServer }));
         status.textContent = "connected";
         status.classList.add("ok");
         status.classList.remove("err");

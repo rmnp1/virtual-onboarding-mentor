@@ -38,6 +38,20 @@ chat_history: dict[int, list[dict[str, str]]] = defaultdict(list)
 _WS_AUTH_TIMEOUT = 10.0
 
 
+def _clean_pending_history(pending: object) -> list[dict[str, str]]:
+    if not isinstance(pending, list):
+        return []
+    cleaned: list[dict[str, str]] = []
+    for item in pending[-20:]:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        content = item.get("content")
+        if role in ("user", "assistant") and isinstance(content, str) and content:
+            cleaned.append({"role": role, "content": content})
+    return cleaned
+
+
 def _handle_message(
     user: User,
     message: str,
@@ -100,7 +114,9 @@ async def websocket_chat(websocket: WebSocket) -> None:
         await websocket.close()
         return
 
-    token = str(first_frame.get("content", "")) if first_frame.get("type") == "auth" else ""
+    is_auth = first_frame.get("type") == "auth"
+    token = str(first_frame.get("content", "")) if is_auth else ""
+    pending_history = first_frame.get("history") if is_auth else None
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
         user_id = int(payload.get("sub", 0))
@@ -125,6 +141,12 @@ async def websocket_chat(websocket: WebSocket) -> None:
 
     language = user.language
     history = chat_history[user.id]
+
+    if not history:
+        cleaned = _clean_pending_history(pending_history)
+        if cleaned:
+            chat_history[user.id] = cleaned
+            history = cleaned
 
     try:
         while True:
