@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from collections import defaultdict
 from contextlib import suppress
 
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 chat_history: dict[int, list[dict[str, str]]] = defaultdict(list)
+_ws_last_message: dict[int, float] = {}
 
 _WS_AUTH_TIMEOUT = 10.0
 
@@ -167,6 +169,18 @@ async def websocket_chat(websocket: WebSocket) -> None:
                 await websocket.send_text(WSMessage(type="pong", content="").model_dump_json())
                 continue
             user_message = msg.get("message", "")
+            if not user_message:
+                continue
+
+            now = time.monotonic()
+            last = _ws_last_message.get(user.id, 0.0)
+            if now - last < settings.ws_min_interval:
+                error_msg = WSMessage(
+                    type="error", content="Please wait a moment before sending another message."
+                )
+                await websocket.send_text(error_msg.model_dump_json())
+                continue
+            _ws_last_message[user.id] = now
 
             ws_host = websocket.client.host if websocket.client else "unknown"
             try:

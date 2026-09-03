@@ -195,6 +195,33 @@ def test_ws_streams_tokens(client, auth_token, patch_search, patch_generate_stre
     assert "".join(frame["content"] for frame in frames) == "Hello world"
 
 
+def test_ws_throttles_rapid_messages(
+    client, auth_token, patch_search, patch_generate_stream
+) -> None:
+    from app.config import settings
+
+    token = auth_token()
+    patch_search()
+    patch_generate_stream(tokens=["ok"])
+    old_interval = settings.ws_min_interval
+    settings.ws_min_interval = 60.0
+
+    try:
+        with client.websocket_connect("/api/chat/ws") as websocket:
+            websocket.send_json({"type": "auth", "content": token})
+            websocket.send_json({"message": "hello"})
+            while True:
+                frame = websocket.receive_json()
+                if frame["type"] == "done":
+                    break
+            websocket.send_json({"message": "again"})
+            frame = websocket.receive_json()
+        assert frame["type"] == "error"
+        assert "wait a moment" in frame["content"]
+    finally:
+        settings.ws_min_interval = old_interval
+
+
 def test_ws_handles_ping_pong(
     client,
     auth_token,
@@ -321,7 +348,7 @@ def test_chat_rest_rate_limited(client, auth_headers, patch_search, patch_genera
     headers = auth_headers()
     patch_search()
     patch_generate("ok")
-    for _ in range(20):
+    for _ in range(10):
         response = client.post("/api/chat", headers=headers, json={"message": "hi"})
         assert response.status_code == 200
     response = client.post("/api/chat", headers=headers, json={"message": "hi"})
@@ -335,7 +362,7 @@ def test_ws_chat_rate_limited(client, auth_token, patch_search, patch_generate_s
     patch_search()
     patch_generate_stream(tokens=["ok"])
 
-    for _ in range(20):
+    for _ in range(10):
         chat_ip.allowed("testclient")
 
     with client.websocket_connect("/api/chat/ws") as websocket:

@@ -16,6 +16,9 @@ GEMINI_OPENAI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
+_EMBEDDING_CACHE: dict[tuple[str, str], list[float]] = {}
+_EMBEDDING_CACHE_MAX = 512
+
 
 def _response_snippet(response: httpx.Response | None, limit: int = 500) -> str:
     if response is None:
@@ -102,9 +105,22 @@ def _get_gemini_embedding(text: str) -> list[float]:
 
 
 def get_embedding(text: str) -> list[float]:
+    provider = str(settings.embedding_provider)
+    cache_key = (provider, text)
+    cached = _EMBEDDING_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     if settings.embedding_provider == "gemini":
-        return _get_gemini_embedding(text)
-    return _get_ollama_embedding(text)
+        embedding = _get_gemini_embedding(text)
+    else:
+        embedding = _get_ollama_embedding(text)
+
+    if embedding:
+        if len(_EMBEDDING_CACHE) >= _EMBEDDING_CACHE_MAX:
+            _EMBEDDING_CACHE.pop(next(iter(_EMBEDDING_CACHE)))
+        _EMBEDDING_CACHE[cache_key] = embedding
+    return embedding
 
 
 def chunk_text(text: str) -> list[str]:

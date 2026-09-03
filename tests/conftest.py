@@ -11,7 +11,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_DIR}/test.db"
 os.environ["CHROMA_PERSIST_DIR"] = f"{_TMP_DIR}/chroma"
 os.environ["SECRET_KEY"] = "test-only-secret-key-which-is-longer-than-32-bytes"
 
-from app.chat.routes import chat_history  # noqa: E402
+from app.chat.routes import _ws_last_message, chat_history  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.base import Base, SessionLocal, engine, init_db  # noqa: E402
 from app.models.user import User  # noqa: E402
@@ -29,16 +29,20 @@ def _create_schema() -> Iterator[None]:
 @pytest.fixture(autouse=True)
 def _clear_chat_history() -> Iterator[None]:
     chat_history.clear()
+    _ws_last_message.clear()
     yield
     chat_history.clear()
+    _ws_last_message.clear()
 
 
 @pytest.fixture(autouse=True)
 def _clear_rate_limits() -> Iterator[None]:
     from app.auth.ratelimit import chat_ip, login_email, login_ip, register_ip
+    from app.knowledge_base.ingest import _EMBEDDING_CACHE
 
     for limiter in (register_ip, login_ip, login_email, chat_ip):
         limiter.clear()
+    _EMBEDDING_CACHE.clear()
     yield
 
 

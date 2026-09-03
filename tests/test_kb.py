@@ -80,6 +80,30 @@ def test_get_embedding_uses_long_timeout(monkeypatch) -> None:
     assert captured["timeout"] == 120.0
 
 
+def test_get_embedding_caches_repeat_query(monkeypatch) -> None:
+    from app.knowledge_base.ingest import _EMBEDDING_CACHE
+
+    calls: list[str] = []
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"embedding": [0.25, 0.5]}
+
+    def fake_post(*args: object, **kwargs: object) -> FakeResponse:
+        calls.append(str(kwargs.get("json")))
+        return FakeResponse()
+
+    _EMBEDDING_CACHE.clear()
+    monkeypatch.setattr("app.knowledge_base.ingest.httpx.post", fake_post)
+    first = get_embedding("repeat me")
+    second = get_embedding("repeat me")
+    assert first == second == [0.25, 0.5]
+    assert len(calls) == 1
+
+
 def test_ingest_documents_stats_and_upsert(tmp_path, monkeypatch) -> None:
     docs_dir = tmp_path / "docs"
     (docs_dir / "en").mkdir(parents=True)

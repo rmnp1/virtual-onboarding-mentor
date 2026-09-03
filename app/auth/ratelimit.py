@@ -48,4 +48,4 @@ def ip_enforce(limiter: RateLimiter, request: Request) -> None:
 register_ip = RateLimiter(max_requests=10, window_seconds=60)
 login_ip = RateLimiter(max_requests=30, window_seconds=60)
 login_email = RateLimiter(max_requests=5, window_seconds=60)
-chat_ip = RateLimiter(max_requests=20, window_seconds=60)
+chat_ip = RateLimiter(max_requests=10, window_seconds=60)
