@@ -166,15 +166,18 @@ def _gemini_generate_stream(prompt: str, system: str) -> Generator[str]:
     }
     for attempt in range(1, settings.gemini_max_retries + 1):
         try:
-            with httpx.Client(timeout=120.0) as client:
-                response = client.post(
+            with (
+                httpx.Client(timeout=120.0) as client,
+                client.stream(
+                    "POST",
                     url,
                     headers=_gemini_headers(),
                     json=payload,
-                )
+                ) as response,
+            ):
                 response.raise_for_status()
-                for line in response.text.splitlines():
-                    if not line.startswith("data:"):
+                for line in response.iter_lines():
+                    if not line or not line.startswith("data:"):
                         continue
                     payload_line = line[len("data:") :].strip()
                     if not payload_line or payload_line == "[DONE]":
